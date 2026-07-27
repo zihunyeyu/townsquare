@@ -1,0 +1,15 @@
+{
+  "name": "townsquare-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Self-hosted backend for the townsquare grimoire frontend (protocol-compatible with src/store/socket.js)",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node test/integration.test.js"
+  },
+  "license": "GPL-3.0-or-later",
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

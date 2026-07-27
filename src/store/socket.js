@@ -1,6 +1,8 @@
+import { WS_URL, LOBBY_URL } from "../config";
+
 class LiveSession {
   constructor(store) {
-    this._wss = "wss://ws.botcgrimoire.top:443/ws/";
+    this._wss = WS_URL;
     // this._wss = "ws://localhost:8081/"; // uncomment if using local server with NODE_ENV=development
     // this._wss = "ws://192.168.1.2:8081/"; // uncomment if using local server with NODE_ENV=development
     this._socket = null;
@@ -2307,7 +2309,7 @@ class LiveSession {
 
 class LiveLobby {
   constructor(store) {
-    this._wss = "wss://ws.botcgrimoire.top:443/lobby/";
+    this._wss = LOBBY_URL;
     // this._wss = "ws://localhost:8082/"; // uncomment if using local server with NODE_ENV=development
     // this._wss = "ws://192.168.1.2:8082/"; // uncomment if using local server with NODE_ENV=development
     this._socket = null;

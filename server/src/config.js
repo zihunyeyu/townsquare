@@ -1,0 +1,35 @@
+// Central configuration, all overridable via environment variables.
+const path = require("path");
+
+module.exports = {
+  // Game WebSocket server (LiveSession in the frontend)
+  GAME_PORT: Number(process.env.GAME_PORT) || 8081,
+  // Lobby WebSocket server (LiveLobby in the frontend)
+  LOBBY_PORT: Number(process.env.LOBBY_PORT) || 8082,
+  // HTTP API (avatar upload/serving, /dynamic/init)
+  API_PORT: Number(process.env.API_PORT) || 8083,
+
+  // How long a room survives its storyteller disconnecting (ms).
+  // Within this window the host may reclaim the room with the same stSecret.
+  HOST_GRACE_MS: Number(process.env.HOST_GRACE_MS) || 90 * 1000,
+
+  // Server-side WebSocket ping interval, used to measure per-connection latency (ms)
+  PING_INTERVAL_MS: Number(process.env.PING_INTERVAL_MS) || 15 * 1000,
+
+  // Max WebSocket message size (bytes). Grimoire/edition payloads can be large.
+  WS_MAX_PAYLOAD: Number(process.env.WS_MAX_PAYLOAD) || 8 * 1024 * 1024,
+
+  // Avatar storage
+  AVATAR_DIR: process.env.AVATAR_DIR || path.join(__dirname, "..", "avatars"),
+  // Mirrors the frontend limit in ImageCropper.vue (1 MiB of raw image data)
+  MAX_AVATAR_BASE64_LENGTH:
+    Number(process.env.MAX_AVATAR_BASE64_LENGTH) || 1 * 1024 * 1024 * (4 / 3),
+
+  // Reported by GET /dynamic/init. Defaults match this repo's frontend so
+  // clients do not see an update prompt.
+  APP_VERSION: process.env.APP_VERSION || "3.3.1",
+  FLOATING_NOTICE: process.env.FLOATING_NOTICE || "",
+
+  // Reserved playerIds that may not be used by clients
+  RESERVED_IDS: new Set(["host", "_host", "player", "default", "lobby"]),
+};

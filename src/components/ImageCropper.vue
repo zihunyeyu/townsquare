@@ -35,6 +35,7 @@
 import { mapState } from "vuex";
 import Cropper from 'cropperjs';
 import 'cropperjs/dist/cropper.css';
+import { AVATAR_UPLOAD_URL } from "../config";
 
 export default {
   data() {
@@ -136,7 +137,7 @@ export default {
       } else {
         // this.$store.commit("session/setPlayerAvatar", this.croppedImage);
         try {
-          const response = await fetch("https://api.botcgrimoire.top/upload/avatar", {
+          const response = await fetch(AVATAR_UPLOAD_URL, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json'

@@ -1,0 +1,4 @@
+node_modules
+avatars
+test/.tmp-avatars
+npm-debug.log

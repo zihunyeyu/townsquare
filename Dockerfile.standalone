@@ -1,0 +1,31 @@
+# ---- 阶段 1：构建前端 ----
+FROM node:20-alpine AS build
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --no-audit --no-fund
+COPY . .
+# 直接用 vue-cli-service 构建，跳过仓库里缺失的 postbuild 脚本
+RUN npx vue-cli-service build
+
+# ---- 阶段 2：一体化运行时（前端静态文件 + 后端 WS/API，单端口） ----
+FROM node:20-alpine
+ENV NODE_ENV=production
+WORKDIR /app
+
+# 后端依赖（只装 ws，层缓存友好：package.json 不变则跳过）
+COPY server/package*.json server/
+RUN cd server && npm ci --omit=dev --no-audit --no-fund
+
+# 后端代码 + 前端产物
+COPY server/src server/src
+COPY --from=build /app/dist server/dist
+
+ENV PORT=8080 \
+    DIST_DIR=/app/server/dist \
+    DOMAIN=localhost \
+    SCHEME=http
+
+EXPOSE 8080
+VOLUME ["/app/server/avatars"]
+
+CMD ["node", "server/src/standalone.js"]

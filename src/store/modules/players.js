@@ -1,3 +1,5 @@
+import { AVATAR_BASE_URL } from "../../config";
+
 const NEWPLAYER = {
   name: "",
   id: "",
@@ -237,7 +239,7 @@ const mutations = {
     } else if (fabled) {
       const fabledStoryteller = {
         "id": "storyteller",
-        "image": ("https://botcgrimoire.top/avatars/" + stImage),
+        "image": (AVATAR_BASE_URL + stImage),
         "firstNightReminder": "",
         "otherNightReminder": "",
         "reminders": [],

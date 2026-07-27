@@ -24,7 +24,7 @@
         <!-- <img :src="`https://botcgrimoire.uk/avatars/${player.image}`" 
           :class="{ on: player.role.id }"
         > -->
-        <img :src="`https://botcgrimoire.top/avatars/${player.image}`" 
+        <img :src="avatarBaseUrl + player.image"
           :class="{ on: player.role.id }"
         >
         <!-- <img :src="`http://localhost:3000/avatars/${player.image}`" 
@@ -300,6 +300,7 @@
 <script>
 import Token from "./Token";
 import { mapGetters, mapState } from "vuex";
+import { AVATAR_BASE_URL } from "../config";
 // import Vue from "vue";
 
 export default {
@@ -316,6 +317,7 @@ export default {
     ...mapState("players", ["players"]),
     ...mapState(["grimoire", "session"]),
     ...mapGetters({ nightOrder: "players/nightOrder" }),
+    avatarBaseUrl: () => AVATAR_BASE_URL,
     index: function() {
       return this.players.indexOf(this.player);
     },

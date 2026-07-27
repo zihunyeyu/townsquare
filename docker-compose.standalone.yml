@@ -1,0 +1,26 @@
+# 一体化单镜像部署：前端 + 后端 + 静态托管，单容器单端口。
+# 每次修改前后端代码后重新构建即可：
+#   docker compose -f docker-compose.standalone.yml up -d --build
+services:
+  app:
+    # 本地已有 townsquare-app 镜像时直接运行，不触发构建；
+    # 镜像不存在时（或加 --build）才会构建并打上这个名字
+    image: townsquare-app
+    build:
+      context: .
+      dockerfile: Dockerfile.standalone
+    restart: unless-stopped
+    environment:
+      # 你的域名或服务器 IP（不带协议；非标准端口可带上，如 example.com:8080）
+      DOMAIN: localhost
+      # http 或 https；https 时前端自动改用 wss（需外层 TLS 代理）
+      SCHEME: http
+      # 与前端 package.json 版本保持一致，避免客户端弹更新提示
+      APP_VERSION: 3.3.1
+    ports:
+      - "${HTTP_PORT:-8080}:8080"
+    volumes:
+      - avatars:/app/server/avatars
+
+volumes:
+  avatars:
