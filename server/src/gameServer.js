@@ -1,3 +1,10 @@
+/*
+ * townsquare-server - 钟楼谜团魔典自建后端
+ * Copyright (C) 2026 zihunyeyu
+ * License: GPLv3 with Section 7 additional terms (see LICENSE, README.md).
+ * Per the license you must retain the startup banner, the
+ * --license/--version commands and all UI attribution.
+ */
 /**
  * Game WebSocket server - protocol-compatible with the frontend's
  * LiveSession class (src/store/socket.js).

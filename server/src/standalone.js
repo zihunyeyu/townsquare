@@ -11,7 +11,17 @@
  *
  * The frontend reads /env.js at runtime (see src/config.js); it is
  * (re)generated on every start from the variables above.
+ *
+ * The startup banner and the --version / --license flags are required by
+ * the license (GPLv3 + Section 7 additional terms) - do not remove.
  */
+const { printBanner, handleCliFlags } = require("./banner");
+
+if (handleCliFlags()) {
+  process.exit(0);
+}
+printBanner();
+
 const http = require("http");
 const fs = require("fs");
 const path = require("path");

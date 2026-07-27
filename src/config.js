@@ -1,3 +1,7 @@
+/*
+ * Copyright (C) 2026 zihunyeyu (backend endpoint configurability)
+ * License: GPLv3 with Section 7 additional terms (see LICENSE, README.md).
+ */
 /**
  * Backend endpoints. Resolution order:
  *   1. window.__ENV (runtime config injected by the Docker entrypoint,

@@ -51,7 +51,7 @@
     "vue",
     "scss"
   ],
-  "license": "LGPL-3.0-or-later",
+  "license": "GPL-3.0-or-later",
   "repository": {
     "type": "git",
     "url": "https://github.com/limpy01/townsquare"

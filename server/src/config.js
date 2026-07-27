@@ -1,3 +1,8 @@
+/*
+ * townsquare-server - 钟楼谜团魔典自建后端
+ * Copyright (C) 2026 zihunyeyu
+ * License: GPLv3 with Section 7 additional terms (see LICENSE, README.md).
+ */
 // Central configuration, all overridable via environment variables.
 const path = require("path");
 
