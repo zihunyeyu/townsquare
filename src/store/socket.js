@@ -30,6 +30,8 @@ class LiveSession {
    */
   _open(channel) {
     this.disconnect();
+    // allow one automatic KOOK self re-bind attempt per connection
+    this._kookAutoBindTried = false;
     this._socket = new WebSocket(
       this._wss +
         channel +
@@ -377,6 +379,9 @@ class LiveSession {
         this._updateSeat(params);
         this._createChatHistory(params);
         break;
+      case "avatar":
+        this._updateAvatar(params);
+        break;
       case "leaveSeat":
         this._updateLeaveSeat();
         break;
@@ -498,6 +503,49 @@ class LiveSession {
       case "setTalking":
         this._handleSetTalking(params);
         break;
+      case "kookBound":
+        this._store.commit("kook/setBound", params);
+        if (params && params.guildId) {
+          this._store.commit("kook/setLastGuildId", params.guildId);
+          // on a fresh bind (categoryId null), re-apply the category the
+          // storyteller chose last time
+          if (
+            !this._isSpectator &&
+            this._store.state.kook.lastCategoryId &&
+            !params.categoryId
+          ) {
+            this.kookSetCategory(this._store.state.kook.lastCategoryId);
+          }
+        }
+        break;
+      case "kookVoice":
+        this._store.commit("kook/setVoice", params);
+        break;
+      case "kookBindings":
+        this._store.commit("kook/setBindings", params);
+        {
+          // auto re-bind my own KOOK account if the room lost it
+          // (fresh room / backend restart)
+          const kookState = this._store.state.kook;
+          const myPlayerId = this._store.state.session.playerId;
+          if (
+            kookState.bound &&
+            kookState.selfQuery &&
+            myPlayerId &&
+            !kookState.bindings[myPlayerId] &&
+            !this._kookAutoBindTried
+          ) {
+            this._kookAutoBindTried = true;
+            this.kookBindUser(kookState.selfQuery);
+          }
+        }
+        break;
+      case "kookBoundUser":
+        this._store.commit("kook/setSelfKook", params);
+        break;
+      case "kookError":
+        this._store.commit("kook/setError", params);
+        break;
     }
   }
 
@@ -559,6 +607,7 @@ class LiveSession {
     this._store.commit("session/setPlayerCount", 0);
     this._store.commit("session/setPing", 0);
     this._store.commit("session/setReconnecting", false);
+    this._store.commit("kook/reset");
     clearTimeout(this._reconnectTimer);
     clearTimeout(this._store.state.session.joinTimeout);
     clearTimeout(this._store.state.session.hostTimeout);
@@ -634,6 +683,13 @@ class LiveSession {
 
     if (allow) {
       this.sendGamestate();
+      // auto re-bind the KOOK guild used last time: the server-side binding
+      // is room-scoped and lost when the room is destroyed or the backend
+      // restarts
+      const kook = this._store.state.kook;
+      if (kook.lastGuildId && !kook.bound) {
+        this.kookBind(kook.lastGuildId);
+      }
     } else {
       await this.showInputModal({
         inputType: "alert",
@@ -1267,7 +1323,8 @@ class LiveSession {
    */
   async _avatarReceived(link) {
     const playerId = this._store.state.session.playerId;
-    const linkId = link.split(".")[0];
+    // filename is `{playerId}-{hash8}.{ext}` (legacy: `{playerId}.{ext}`)
+    const linkId = link.replace(/(-[0-9a-f]{8})?\.(png|webp|jpg|gif)$/, "");
     if (playerId != linkId) return;
 
     this._store.commit("session/updatePlayerAvatar", link);
@@ -1353,6 +1410,22 @@ class LiveSession {
   }
 
   /**
+   * Send the current avatar to the host so it gets broadcast to the whole
+   * session. Needed because a claim is only sent once per seat; changing the
+   * avatar afterwards would otherwise never reach the other players.
+   */
+  sendAvatar() {
+    if (!this._isSpectator) return;
+    const { playerId, playerAvatar, sessionId } = this._store.state.session;
+    if (!sessionId || !playerId || !playerAvatar) return;
+    const player = this._store.state.players.players.find(p => p.id === playerId);
+    if (!player) return; // not seated: the next claim will carry the avatar
+    // update own seat right away; the host broadcast will confirm it
+    this._store.commit("players/update", { player, property: "image", value: playerAvatar });
+    this._sendDirect("host", "avatar", [playerId, playerAvatar]);
+  }
+
+  /**
    * Update a player id associated with that seat.
    * @param index seat index or -1
    * @param value playerId to add / remove
@@ -1426,6 +1499,21 @@ class LiveSession {
     }
     // update player session list as if this was a ping
     this._handlePing([true, value, 0]);
+  }
+
+  /**
+   * Update the avatar of a seated player (host only). The broadcast to the
+   * session happens through the players/update subscription (sendPlayer).
+   * @param playerId
+   * @param image
+   * @private
+   */
+  _updateAvatar([playerId, image]) {
+    if (this._isSpectator) return;
+    if (typeof image !== "string" || !/^[A-Za-z0-9_-]{1,96}\.(png|webp|jpg|gif)$/.test(image)) return;
+    const player = this._store.state.players.players.find(p => p.id === playerId);
+    if (!player) return;
+    this._store.commit("players/update", { player, property: "image", value: image });
   }
 
 
@@ -1875,6 +1963,49 @@ class LiveSession {
   _handleSetTalking(payload){
     if (payload.seatNum < 0 || payload.seatNum >= this._store.state.players.players.length) return;
     this._store.state.players.players[payload.seatNum].isTalking = payload.isTalking;
+  }
+
+  // --- KOOK voice integration -------------------------------------------
+  // All of these are executed by the server (which holds the bot token)
+  // via the "request" channel.
+
+  /** Bind this room to a KOOK guild (storyteller only). */
+  kookBind(guildId) {
+    this._request("kookBind", this._store.state.session.playerId, { guildId });
+  }
+
+  kookUnbind() {
+    this._request("kookUnbind", this._store.state.session.playerId, null);
+  }
+
+  /** Bind this client's own KOOK account by "用户名#识别号". */
+  kookBindUser(query) {
+    this._request("kookBindUser", this._store.state.session.playerId, { query });
+  }
+
+  /** Move my own KOOK user into the given voice channel. */
+  kookMove(channelId) {
+    this._request("kookMove", this._store.state.session.playerId, { channelId });
+  }
+
+  /** Move every bound, in-voice player into the given channel (host). */
+  kookMoveAll(channelId) {
+    this._request("kookMoveAll", this._store.state.session.playerId, { channelId });
+  }
+
+  /** Server-mute (or unmute) the given (or all bound) KOOK users (host). */
+  kookMute(payload) {
+    this._request("kookMute", this._store.state.session.playerId, payload);
+  }
+
+  /** Restrict the room's voice panel to one channel category (host). */
+  kookSetCategory(categoryId) {
+    this._request("kookSetCategory", this._store.state.session.playerId, { categoryId });
+  }
+
+  /** Remove my own KOOK binding from the room. */
+  kookUnbindSelf() {
+    this._request("kookUnbindUser", this._store.state.session.playerId, null);
   }
 
   /**
@@ -2624,6 +2755,9 @@ export default store => {
       case "session/setPlayerAvatar":
         session.uploadAvatar(payload);
         break;
+      case "session/updatePlayerAvatar":
+        session.sendAvatar();
+        break;
       case "session/setSecretVote":
         session.setSecretVote(payload);
         break;
@@ -2642,6 +2776,30 @@ export default store => {
       //   break;
       case "session/setTalking":
         session.setTalking(payload);
+        break;
+      case "kook/bind":
+        session.kookBind(payload);
+        break;
+      case "kook/unbind":
+        session.kookUnbind();
+        break;
+      case "kook/bindSelf":
+        session.kookBindUser(payload);
+        break;
+      case "kook/unbindSelf":
+        session.kookUnbindSelf();
+        break;
+      case "kook/move":
+        session.kookMove(payload);
+        break;
+      case "kook/moveAll":
+        session.kookMoveAll(payload);
+        break;
+      case "kook/mute":
+        session.kookMute(payload);
+        break;
+      case "kook/setCategory":
+        session.kookSetCategory(payload);
         break;
       case "session/setIsRole":
         session.setIsRole(payload);

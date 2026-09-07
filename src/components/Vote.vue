@@ -213,6 +213,10 @@ export default {
       voteTimer: null
     };
   },
+  beforeDestroy() {
+    // never leak the vote interval when the component is torn down early
+    clearInterval(this.voteTimer);
+  },
   watch: {
     'nominee.role.team': {
       handler(val) {

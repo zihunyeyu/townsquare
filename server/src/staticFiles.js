@@ -36,7 +36,14 @@ const MIME = {
 
 function serveStatic(rootDir, req, res) {
   const url = new URL(req.url, "http://localhost");
-  let pathname = decodeURIComponent(url.pathname);
+  let pathname;
+  try {
+    pathname = decodeURIComponent(url.pathname);
+  } catch (err) {
+    // malformed percent-encoding must not crash the process
+    res.writeHead(400);
+    return res.end("bad request");
+  }
   // prevent path traversal
   const filePath = path.normalize(path.join(rootDir, pathname));
   if (!filePath.startsWith(path.normalize(rootDir))) {

@@ -5,6 +5,7 @@ import socket from "./socket";
 import players from "./modules/players";
 import session from "./modules/session";
 import lobby from "./modules/lobby";
+import kook from "./modules/kook";
 import editionJSON from "../editions.json";
 import rolesJSON from "../roles.json";
 import fabledJSON from "../fabled.json";
@@ -105,7 +106,8 @@ export default new Vuex.Store({
   modules: {
     players,
     session,
-    lobby
+    lobby,
+    kook
   },
   state: {
     version: "3.3.1",
@@ -121,6 +123,7 @@ export default new Vuex.Store({
       isMuted: false,
       isImageOptIn: true,
       isForwardEvilInfo: false,
+      isRoleAvatar: false,
       zoom: 0,
       background: "",
       audioThreshold: 150
@@ -216,6 +219,7 @@ export default new Vuex.Store({
     toggleMenu: toggle("isMenuOpen"),
     toggleNightOrder: toggle("isNightOrder"),
     toggleStatic: toggle("isStatic"),
+    toggleRoleAvatar: toggle("isRoleAvatar"),
     toggleNight: toggle("isNight"),
     toggleGrimoire: toggle("isPublic"),
     toggleImageOptIn: toggle("isImageOptIn"),

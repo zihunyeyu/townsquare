@@ -29,6 +29,7 @@ const RoomManager = require("./rooms");
 const GameServer = require("./gameServer");
 const LobbyServer = require("./lobbyServer");
 const HttpApi = require("./httpApi");
+const KookService = require("./kook/kookService");
 const { serveStatic } = require("./staticFiles");
 
 const PORT = Number(process.env.PORT) || 8080;
@@ -51,7 +52,8 @@ fs.writeFileSync(path.join(DIST_DIR, "env.js"), envJs);
 
 // --- wire up services -----------------------------------------------------
 const roomManager = new RoomManager();
-const game = new GameServer(roomManager);
+const kook = new KookService();
+const game = new GameServer(roomManager, kook);
 game.createWss();
 const lobby = new LobbyServer(roomManager);
 lobby.createWss();

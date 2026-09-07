@@ -6,3 +6,4 @@ dist
 /server/dynamic
 /server/avatars
 server/test/.tmp-avatars
+/server/kook-token.txt

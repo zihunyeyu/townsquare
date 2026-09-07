@@ -7,10 +7,11 @@
  */
 /**
  * Shared avatar storage helper. Avatars are stored as files named
- * `{playerId}.{ext}` in AVATAR_DIR and served by the HTTP API.
+ * `{playerId}-{hash8}.{ext}` in AVATAR_DIR and served by the HTTP API.
  */
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 const { AVATAR_DIR } = require("./config");
 
 const MIME_TO_EXT = {
@@ -26,7 +27,10 @@ function isValidPlayerId(playerId) {
 
 /**
  * Decode a `data:image/...;base64,...` URL and save it as
- * `{playerId}.{ext}`. Returns the filename, or null on invalid input.
+ * `{playerId}-{hash8}.{ext}`. The content hash makes each new avatar a new
+ * URL, so browsers/CDNs can cache the files forever and a changed avatar is
+ * picked up immediately. Older avatars of the same player are removed.
+ * Returns the filename, or null on invalid input.
  */
 function saveAvatar(playerId, dataUrl) {
   if (!isValidPlayerId(playerId)) return null;
@@ -38,7 +42,18 @@ function saveAvatar(playerId, dataUrl) {
   const buffer = Buffer.from(match[2], "base64");
   if (!buffer.length) return null;
   fs.mkdirSync(AVATAR_DIR, { recursive: true });
-  const filename = `${playerId}.${ext}`;
+  const hash = crypto.createHash("md5").update(buffer).digest("hex").slice(0, 8);
+  const filename = `${playerId}-${hash}.${ext}`;
+  // remove previous avatars of this player (old `{playerId}.{ext}` and
+  // hashed `{playerId}-*.{ext}` formats alike)
+  for (const entry of fs.readdirSync(AVATAR_DIR)) {
+    if (
+      entry !== filename &&
+      (entry.startsWith(`${playerId}-`) || entry.startsWith(`${playerId}.`))
+    ) {
+      fs.rmSync(path.join(AVATAR_DIR, entry), { force: true });
+    }
+  }
   fs.writeFileSync(path.join(AVATAR_DIR, filename), buffer);
   return filename;
 }

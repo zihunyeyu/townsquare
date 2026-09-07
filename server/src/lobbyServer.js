@@ -16,7 +16,12 @@
  */
 const { WebSocketServer } = require("ws");
 const http = require("http");
-const { LOBBY_PORT, RESERVED_IDS } = require("./config");
+const {
+  LOBBY_PORT,
+  LOBBY_MAX_PAYLOAD,
+  PING_INTERVAL_MS,
+  RESERVED_IDS,
+} = require("./config");
 
 function send(ws, command, params) {
   if (ws && ws.readyState === 1) {
@@ -35,7 +40,11 @@ class LobbyServer {
    * any HTTP server (own port via start(), or shared via standalone.js).
    */
   createWss() {
-    this.wss = new WebSocketServer({ noServer: true });
+    this.wss = new WebSocketServer({
+      noServer: true,
+      // lobby messages are tiny; reject oversized payloads early
+      maxPayload: LOBBY_MAX_PAYLOAD,
+    });
     this.wss.on("connection", (ws, req) => {
       const url = new URL(req.url, "http://localhost");
       const segments = url.pathname.split("/").filter(Boolean);
@@ -46,12 +55,35 @@ class LobbyServer {
         ws.close(1000, "无效的玩家ID");
         return;
       }
+      ws.isAlive = true;
+      ws.on("pong", () => {
+        ws.isAlive = true;
+      });
+      ws.on("error", (err) => {
+        // a single misbehaving client must never crash the process
+        console.error("[lobby] ws error:", err.message);
+      });
       send(ws, "setRooms", this.roomManager.listPublicRooms());
     });
 
-    const broadcast = (command, roomId) => {
+    // detect half-open connections and drop them
+    const interval = setInterval(() => {
       for (const ws of this.wss.clients) {
-        send(ws, command, roomId);
+        if (ws.isAlive === false) {
+          ws.terminate();
+          continue;
+        }
+        ws.isAlive = false;
+        ws.ping();
+      }
+    }, PING_INTERVAL_MS);
+    this.wss.on("close", () => clearInterval(interval));
+
+    const broadcast = (command, roomId) => {
+      // serialize once, then send the same payload to every watcher
+      const data = JSON.stringify([command, roomId]);
+      for (const ws of this.wss.clients) {
+        if (ws.readyState === 1) ws.send(data);
       }
     };
     this.roomManager.on("roomHosted", (id) => broadcast("addRoom", id));

@@ -15,21 +15,24 @@
         player.role.team
       ]"
     >
-      <div class="seatNum">{{ players.indexOf(player) + 1 }}</div>
+      <div class="seatNum">{{ index + 1 }}</div>
       <div class="newMessage" v-show="player.newMessages > 0">{{ player.newMessages }}</div>
 
       <div class="shroud" @click="toggleStatus()"></div>
       <div class="life" @click="toggleStatus()"></div>
       <div v-if="player.id" class="avatar">
-        <!-- <img :src="`https://botcgrimoire.uk/avatars/${player.image}`" 
-          :class="{ on: player.role.id }"
-        > -->
-        <img :src="avatarBaseUrl + player.image"
+        <!-- option (魔典菜单): show other players' assigned role icons
+             instead of their uploaded avatars -->
+        <img
+          v-if="useRoleIcon"
+          :src="roleIconSrc"
+          class="on role-icon"
+        >
+        <img
+          v-else
+          :src="avatarBaseUrl + player.image"
           :class="{ on: player.role.id }"
         >
-        <!-- <img :src="`http://localhost:3000/avatars/${player.image}`" 
-            :class="{ on: player.role.id }"
-        > -->
       </div>
 
       <div
@@ -318,6 +321,26 @@ export default {
     ...mapState(["grimoire", "session"]),
     ...mapGetters({ nightOrder: "players/nightOrder" }),
     avatarBaseUrl: () => AVATAR_BASE_URL,
+    // option (魔典菜单"角色标记作头像"): replace other players' uploaded
+    // avatars with their assigned role icons
+    useRoleIcon() {
+      return (
+        this.grimoire.isRoleAvatar &&
+        this.player.role &&
+        !!this.player.role.id &&
+        this.player.id !== this.session.playerId
+      );
+    },
+    // mirrors the icon resolution of Token.vue (custom image when opted in)
+    roleIconSrc() {
+      const role = this.player.role;
+      if (role.image && this.grimoire.isImageOptIn) return role.image;
+      return require(
+        "../assets/icons/" +
+          (role.imageAlt || role.id.replace(/old1$/, "")) +
+          ".png"
+      );
+    },
     index: function() {
       return this.players.indexOf(this.player);
     },
@@ -856,6 +879,11 @@ export default {
 
 .player .avatar img.on {
   filter: blur(3px)
+}
+
+.player .avatar img.role-icon {
+  filter: none;
+  object-fit: contain;
 }
 
 #townsquare.public .circle .token {

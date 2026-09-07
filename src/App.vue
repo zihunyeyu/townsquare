@@ -40,6 +40,7 @@
     <GameStateModal />
     <InputModal ref="input"/>
     <GroupChatModal/>
+    <KookVoicePanel/>
     <VersionModal/>
     <Gradients />
     <!-- <span id="version">v{{ version }}</span> -->
@@ -66,6 +67,7 @@ import VoteHistoryModal from "@/components/modals/VoteHistoryModal";
 import GameStateModal from "@/components/modals/GameStateModal";
 import InputModal from "@/components/modals/InputModal.vue";
 import GroupChatModal from "./components/modals/GroupChatModal.vue";
+import KookVoicePanel from "./components/KookVoicePanel.vue";
 import VersionModal from "./components/modals/VersionModal.vue";
 
 export default {
@@ -86,6 +88,7 @@ export default {
     DrawModal,
     InputModal,
     GroupChatModal,
+    KookVoicePanel,
     VersionModal,
     Gradients
   },

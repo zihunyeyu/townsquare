@@ -23,6 +23,9 @@ class Room {
     this.hostPlayerId = null;
     this.players = new Map(); // playerId -> WebSocket
     this.graceTimer = null; // host-reconnect grace timer
+    this.kookGuildId = null; // bound KOOK guild id (voice integration)
+    this.kookCategoryId = null; // optional category restricting voice channels
+    this.kookBindings = new Map(); // playerId -> kookUserId
   }
 
   hasActiveHost() {
@@ -100,9 +103,14 @@ class RoomManager extends EventEmitter {
     room.players.set(playerId, ws);
   }
 
-  removePlayer(room, playerId) {
+  removePlayer(room, playerId, ws) {
+    // Ignore close events from a superseded connection: when a player
+    // reconnects with the same playerId, the stale socket's close must not
+    // remove the fresh one.
+    if (ws && room.players.get(playerId) !== ws) return false;
     room.players.delete(playerId);
     this._cleanupIfEmpty(room);
+    return true;
   }
 
   /**

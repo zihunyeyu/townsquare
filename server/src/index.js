@@ -16,9 +16,14 @@ const RoomManager = require("./rooms");
 const GameServer = require("./gameServer");
 const LobbyServer = require("./lobbyServer");
 const HttpApi = require("./httpApi");
+const KookService = require("./kook/kookService");
 
 const roomManager = new RoomManager();
+const kook = new KookService();
+if (kook.enabled()) {
+  console.log("[kook] integration enabled");
+}
 
-new GameServer(roomManager).start();
+new GameServer(roomManager, kook).start();
 new LobbyServer(roomManager).start();
 new HttpApi().start();

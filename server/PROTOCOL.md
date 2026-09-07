@@ -78,9 +78,19 @@ ws://{host}:{port}/{playerId}
 | `checkAllowHost` | 说书人请求主持房间 | `["allowHost", bool]` |
 | `checkAllowJoin` | 玩家请求加入房间 | `["allowJoin", bool]` |
 | `deleteMessage` | 可靠投递确认，`params = [queueType, feedbackId]` | 向原发送方转发 `["feedback", feedbackId]` |
+| `kookBind` | 绑定房间到 KOOK 服务器，`params = { guildId }`（仅 host） | 广播 `kookBound` + `kookVoice` |
+| `kookUnbind` | 解除绑定（仅 host） | 广播 `["kookBound", null]` |
+| `kookBindUser` | 绑定自己的 KOOK 账号，`params = { query: "用户名#识别号" }` | 广播 `kookBindings`；向本人回 `kookBoundUser` |
+| `kookUnbindUser` | 解除自己的 KOOK 绑定 | 广播 `kookBindings`；未绑定回 `kookError` |
+| `kookMove` | 把自己移到指定语音频道，`params = { channelId }` | 广播 `kookVoice`；失败回 `kookError` |
+| `kookMoveAll` | 全员移到指定语音频道（仅 host），`params = { channelId }` | 广播 `kookVoice` |
+| `kookMute` | 服务器级闭麦/解除（仅 host），`params = { userIds?, mute?, type? }`（type 1=麦克风 2=耳机） | 广播 `kookVoice` |
+| `kookSetCategory` | 限定本局使用的语音频道分组（仅 host），`params = { categoryId }`，空值解除 | 广播 `kookBound` + `kookVoice`（按分组过滤） |
+| `kookSync` | 请求重发当前 KOOK 状态 | `kookBound` + `kookBindings` + `kookVoice` |
 
 `allowHost` 判定：房间无活跃 host，或 `stSecret` 与房间记录匹配（重连夺回）。
 `allowJoin` 判定：房间当前有活跃 host。
+KOOK 指令的失败一律以 `["kookError", { op, message }]` 回复请求方（见 §9）。
 
 ### 3.3 `uploadFile` — 文件上传
 
@@ -121,6 +131,7 @@ ws://{host}:{port}/{playerId}
 | `feedback` | 服务器 | 可靠投递确认，转发给原发送方 |
 | `avatarReceived` | 服务器 | 头像上传成功，params 为文件名 |
 | `setRooms` / `addRoom` / `removeRoom` | 服务器（大厅） | 房间列表全量/增量推送 |
+| `kookBound` / `kookBindings` / `kookVoice` / `kookBoundUser` / `kookError` | 服务器 | KOOK 语音集成（见 §9） |
 | 其余全部 | 中继 | `gs`、`edition`、`states`、`teamsNames`、`firstNight`、`otherNight`、`fabled`、`syncPlayersStatus`、`stId`、`player`、`bluff`、`grimoire`、`claim`、`leaveSeat`、`ping`、`nomination`、`swap`、`move`、`remove`、`marked`、`isNight`、`isVoteHistoryAllowed`、`votingSpeed`、`clearVoteHistory`、`isVoteInProgress`、`vote`、`lock`、`bye`、`pronouns`、`isRole`、`usingRole`、`chat`、`addGroupChat`、`removeGroupChat`、`removeGroupChatMember`、`setTimer`、`startTimer`、`stopTimer`、`secretVote`、`bootlegger`、`useOldOrder`、`useOldRole`、`isReview`、`setTalking`、`getGamestate`、`getStId` |
 
 中继消息的语义由客户端定义，服务器不解释 payload。
@@ -183,3 +194,40 @@ ws://{host}:{port}/{playerId}
 - 头像上传大小与格式受 §5 限制；HTTP body 超限返回 413。
 - 游戏逻辑（角色、投票合法性等）完全由客户端执行，服务器**不做**游戏规则校验。
   恶意客户端可以伪造消息——与官方后端一致，信任模型不变。
+
+## 9. KOOK 语音集成
+
+可选功能，需配置环境变量 `KOOK_BOT_TOKEN`（未配置时所有 `kook*` 请求回
+`kookError`，其余行为不变）。**token 只存在于服务器进程内，绝不下发前端。**
+
+### 9.1 模型
+
+- 房间通过 `request/kookBind { guildId }`（仅 host）绑定到一个 KOOK 服务器；
+  机器人必须是该服务器成员且具备语音管理权限。
+- 绑定关系存于房间：`room.kookGuildId`、`room.kookBindings`（`playerId -> kookUserId`）、
+  `room.kookCategoryId`（可选的分组限定），房间销毁时随之清理。
+- 设置分组后，推送的 `kookVoice` 快照只包含该分组下的语音频道
+  （所有分组本身始终保留，供前端切换），移动/集合指令也被约束在该分组内。
+- 语音状态（频道树、频道内成员、闭麦列表）由**服务器持有**（本后端唯一的
+  有状态模块）：REST 全量初始化 + Gateway 事件增量维护 + 每 60s 全量对账。
+  实现见 `src/kook/`（`kookApi` REST 封装 / `kookGateway` 长连接 /
+  `kookVoice` 状态缓存 / `kookService` 门面）。
+
+### 9.2 下行消息
+
+| command | params | 时机 |
+|---|---|---|
+| `kookBound` | `{ guildId, guildName, guildIcon, categoryId }` 或 `null` | 绑定/解绑/改分组时广播；新连接加入已绑定房间时单独补发 |
+| `kookBindings` | `{ playerId: kookUserId, ... }` | 绑定/解绑用户、玩家真正离开时广播 |
+| `kookVoice` | 语音状态快照 `{ guildId, name, ready, channels, users, occupancy, muted, deafened }` | 状态变化时全房间广播（全量快照，无量级问题） |
+| `kookBoundUser` | `{ id, username, nickname, avatar, identify_num }` | 本人 `kookBindUser` 成功后回执；重连时若绑定仍在会补发 |
+| `kookError` | `{ op, message }` | 任一 `kook*` 指令失败时回复请求方 |
+
+### 9.3 约束（继承自 KOOK 平台）
+
+- 只能移动**已经在语音频道中**的用户（`channel/move-user` 平台限制）；
+- 闭麦是**服务器级**（`guild-mute`），同一 KOOK 服务器上同时开多个房间会互相干扰，
+  请为一个房间使用一个独立的 KOOK 服务器；
+- 机器人主动发消息有每日配额（10000 条/开发者），本集成不发送任何聊天消息，
+  不受影响；
+- KOOK REST 有按路由的频率限制，客户端已内置 429 退避重试。

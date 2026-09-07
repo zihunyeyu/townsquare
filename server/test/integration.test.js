@@ -271,6 +271,38 @@ test("host is notified with bye when a player disconnects", async () => {
   host.close();
 });
 
+test("stale close after same-id reconnect must not evict the fresh socket", async () => {
+  const host = await connect(`${GAME_URL}/9013/hostM/host?auth=secret13`);
+  send(host, "request", { checkAllowHost: ["hostM", null] });
+  await nextMessage(host, ([c]) => c === "allowHost", "allowHost");
+
+  // player connects, then reconnects with the same playerId (flaky network)
+  const stale = await connect(`${GAME_URL}/9013/p13`);
+  const fresh = await connect(`${GAME_URL}/9013/p13`);
+  await sleep(100);
+
+  // the stale socket's close must NOT produce a bye nor remove the fresh one
+  let byeReceived = false;
+  host.on("message", (d) => {
+    const [c, p] = JSON.parse(d);
+    if (c === "bye" && p === "p13") byeReceived = true;
+  });
+  stale.close();
+  await sleep(300);
+  assert.strictEqual(byeReceived, false);
+
+  // the fresh connection is still in the room and receives broadcasts
+  const freshGot = nextMessage(
+    fresh,
+    ([c]) => c === "nomination",
+    "nomination on fresh socket"
+  );
+  send(host, "nomination", [0, 1]);
+  await freshGot;
+  host.close();
+  fresh.close();
+});
+
 test("host can reclaim with the same secret after disconnect", async () => {
   let host = await connect(`${GAME_URL}/9010/hostK/host?auth=secret10`);
   send(host, "request", { checkAllowHost: ["hostK", null] });
@@ -325,7 +357,8 @@ test("HTTP API: avatar upload + retrieval, /dynamic/init", async () => {
   assert.strictEqual(upload.status, 200);
   const result = await upload.json();
   assert.strictEqual(result.status, "success");
-  assert.strictEqual(result.avatarUrl, "tester1.png");
+  // avatar filenames carry a content hash: {playerId}-{hash8}.{ext}
+  assert.ok(/^tester1-[0-9a-f]{8}\.png$/.test(result.avatarUrl));
 
   const avatar = await fetch(`${API_URL}/avatars/${result.avatarUrl}`);
   assert.strictEqual(avatar.status, 200);
@@ -351,10 +384,284 @@ test("invalid connections are rejected", async () => {
   await expectClose(`${GAME_URL}/9012/someone/host`, "missing auth");
 });
 
+// ---------------------------------------------------------- fake KOOK service
+// Stubbed KookService: no network, records mutating calls, emits "change"
+// from the fake voice cache so the GameServer broadcast path is exercised.
+function makeFakeKook() {
+  const EventEmitter = require("events");
+  class FakeVoice extends EventEmitter {
+    constructor() {
+      super();
+      this.name = "测试服务器";
+      this.icon = "https://img.kookapp.cn/icons/guild.png";
+      this.ready = true;
+      this.channels = new Map([
+        ["cat1", { id: "cat1", name: "测试分组", isCategory: true, level: 0 }],
+        ["vc1", { id: "vc1", name: "主房间", isCategory: false, level: 1, limitAmount: 99, parentId: "cat1" }],
+        ["vc2", { id: "vc2", name: "夜晚房", isCategory: false, level: 2, limitAmount: 2, parentId: "cat1" }],
+        ["vc9", { id: "vc9", name: "别局房间", isCategory: false, level: 3, limitAmount: 25, parentId: "" }],
+      ]);
+      this.users = new Map([
+        ["kook1", { id: "kook1", username: "玩家一", nickname: "小三" }],
+      ]);
+      this.occupancy = new Map([["vc1", new Set(["kook1"])], ["vc2", new Set()]]);
+      this.muted = new Set();
+    }
+    snapshot(categoryId = null) {
+      let channels = [...this.channels.values()];
+      let occupancy = this.occupancy;
+      if (categoryId) {
+        channels = channels.filter(
+          (c) => c.isCategory || c.parentId === categoryId
+        );
+        const ids = new Set(channels.map((c) => c.id));
+        occupancy = new Map([...this.occupancy].filter(([cid]) => ids.has(cid)));
+      }
+      return {
+        guildId: "g1",
+        name: this.name,
+        icon: this.icon,
+        ready: this.ready,
+        channels,
+        users: Object.fromEntries(this.users),
+        occupancy: Object.fromEntries(
+          [...occupancy].map(([k, v]) => [k, [...v]])
+        ),
+        muted: [...this.muted],
+        deafened: [],
+      };
+    }
+    channelOfUser(id) {
+      for (const [cid, set] of this.occupancy) if (set.has(id)) return cid;
+      return null;
+    }
+    moveLocal(id, cid) {
+      const from = this.channelOfUser(id);
+      if (from) this.occupancy.get(from).delete(id);
+      if (!this.occupancy.has(cid)) this.occupancy.set(cid, new Set());
+      this.occupancy.get(cid).add(id);
+      this.emit("change", this.snapshot());
+    }
+    setMuteLocal(id, type, on) {
+      if (on) this.muted.add(id);
+      else this.muted.delete(id);
+      this.emit("change", this.snapshot());
+    }
+    upsertUser(u) {
+      this.users.set(u.id, u);
+    }
+  }
+  const voice = new FakeVoice();
+  const calls = { moveUsers: [], muteUser: [], unmuteUser: [] };
+  return {
+    calls,
+    _voice: voice,
+    enabled: () => true,
+    voices: new Map([["g1", voice]]),
+    async getVoice() {
+      return voice;
+    },
+    api: {
+      async guildUserList(guildId, search) {
+        return [{ id: "kook1", username: search, nickname: "小三", identify_num: "1234" }];
+      },
+      async moveUsers(cid, ids) {
+        calls.moveUsers.push([cid, ids]);
+      },
+      async muteUser(g, id, type) {
+        calls.muteUser.push([id, type]);
+      },
+      async unmuteUser(g, id, type) {
+        calls.unmuteUser.push([id, type]);
+      },
+    },
+  };
+}
+
+test("kook: category selection filters voice state and constrains moves", async () => {
+  const host = await connect(`${GAME_URL}/9022/hostP/host?auth=secret22`);
+  send(host, "request", { checkAllowHost: ["hostP", null] });
+  await nextMessage(host, ([c]) => c === "allowHost", "allowHost");
+  send(host, "request", { kookBind: ["hostP", { guildId: "g1" }] });
+  await nextMessage(host, ([c]) => c === "kookBound", "kookBound");
+  await nextMessage(host, ([c]) => c === "kookVoice", "initial kookVoice");
+
+  // select the 测试分组 category
+  const boundWithCat = nextMessage(
+    host,
+    ([c, p]) => c === "kookBound" && p.categoryId === "cat1",
+    "kookBound with categoryId"
+  );
+  const filtered = nextMessage(
+    host,
+    ([c, p]) =>
+      c === "kookVoice" &&
+      !p.channels.some((ch) => ch.id === "vc9") &&
+      p.channels.some((ch) => ch.id === "vc1"),
+    "filtered kookVoice"
+  );
+  send(host, "request", { kookSetCategory: ["hostP", { categoryId: "cat1" }] });
+  await boundWithCat;
+  await filtered;
+
+  // moving to a channel outside the category is rejected
+  const err = nextMessage(
+    host,
+    ([c, p]) => c === "kookError" && p.op === "moveAll",
+    "kookError moveAll outside category"
+  );
+  send(host, "request", { kookMoveAll: ["hostP", { channelId: "vc9" }] });
+  await err;
+  host.close();
+});
+
+test("kook: host binds guild; voice state is pushed to room members", async () => {
+  const host = await connect(`${GAME_URL}/9020/hostN/host?auth=secret20`);
+  send(host, "request", { checkAllowHost: ["hostN", null] });
+  await nextMessage(host, ([c]) => c === "allowHost", "allowHost");
+
+  const bound = nextMessage(
+    host,
+    ([c, p]) =>
+      c === "kookBound" && p.guildName === "测试服务器" && !!p.guildIcon,
+    "kookBound"
+  );
+  const voiceMsg = nextMessage(host, ([c]) => c === "kookVoice", "kookVoice");
+  send(host, "request", { kookBind: ["hostN", { guildId: "g1" }] });
+  await bound;
+  await voiceMsg;
+
+  // a player joining later gets the full kook state pushed
+  const player = await connect(`${GAME_URL}/9020/p20`);
+  await nextMessage(player, ([c]) => c === "kookBound", "kookBound on join");
+  await nextMessage(player, ([c]) => c === "kookVoice", "kookVoice on join");
+  await nextMessage(player, ([c]) => c === "kookBindings", "kookBindings on join");
+  host.close();
+  player.close();
+});
+
+test("kook: bind user, self move, moveAll/mute host-only guards", async () => {
+  const host = await connect(`${GAME_URL}/9021/hostO/host?auth=secret21`);
+  send(host, "request", { checkAllowHost: ["hostO", null] });
+  await nextMessage(host, ([c]) => c === "allowHost", "allowHost");
+  send(host, "request", { kookBind: ["hostO", { guildId: "g1" }] });
+  await nextMessage(host, ([c]) => c === "kookBound", "kookBound");
+  await nextMessage(host, ([c]) => c === "kookVoice", "initial kookVoice");
+  const player = await connect(`${GAME_URL}/9021/p21`);
+  await nextMessage(player, ([c]) => c === "kookBound", "kookBound");
+
+  // moving before binding is rejected
+  const errNoBind = nextMessage(
+    player,
+    ([c, p]) => c === "kookError" && p.op === "move",
+    "kookError before binding"
+  );
+  send(player, "request", { kookMove: ["p21", { channelId: "vc2" }] });
+  await errNoBind;
+
+  // player binds own KOOK account by 用户名#识别号
+  const boundUser = nextMessage(
+    player,
+    ([c, p]) =>
+      c === "kookBoundUser" && p.id === "kook1" && p.identify_num === "1234",
+    "kookBoundUser"
+  );
+  const bindingsOnHost = nextMessage(
+    host,
+    ([c, p]) => c === "kookBindings" && p.p21 === "kook1",
+    "kookBindings on host"
+  );
+  send(player, "request", { kookBindUser: ["p21", { query: "玩家一#1234" }] });
+  await boundUser;
+  await bindingsOnHost;
+
+  // non-host cannot moveAll
+  const errNotHost = nextMessage(
+    player,
+    ([c, p]) => c === "kookError" && p.op === "moveAll",
+    "kookError moveAll"
+  );
+  send(player, "request", { kookMoveAll: ["p21", { channelId: "vc2" }] });
+  await errNotHost;
+
+  // player moves self (kook1 is in vc1 per the fake occupancy)
+  const voiceAfterMove = nextMessage(
+    player,
+    ([c, p]) => c === "kookVoice" && (p.occupancy.vc2 || []).includes("kook1"),
+    "kookVoice after self move"
+  );
+  const voiceAfterMoveHost = nextMessage(
+    host,
+    ([c, p]) => c === "kookVoice" && (p.occupancy.vc2 || []).includes("kook1"),
+    "kookVoice after self move on host"
+  );
+  send(player, "request", { kookMove: ["p21", { channelId: "vc2" }] });
+  await voiceAfterMove;
+  await voiceAfterMoveHost;
+
+  // host moves everyone back to vc1, then mutes all bound users
+  const backOnVc1 = nextMessage(
+    host,
+    ([c, p]) => c === "kookVoice" && (p.occupancy.vc1 || []).includes("kook1"),
+    "kookVoice after moveAll"
+  );
+  send(host, "request", { kookMoveAll: ["hostO", { channelId: "vc1" }] });
+  await backOnVc1;
+
+  const mutedMsg = nextMessage(
+    player,
+    ([c, p]) => c === "kookVoice" && (p.muted || []).includes("kook1"),
+    "kookVoice after mute"
+  );
+  send(host, "request", { kookMute: ["hostO", { mute: true }] });
+  await mutedMsg;
+  host.close();
+  player.close();
+});
+
+test("kook: unbindUser removes the sender's binding", async () => {
+  const host = await connect(`${GAME_URL}/9023/hostQ/host?auth=secret23`);
+  send(host, "request", { checkAllowHost: ["hostQ", null] });
+  await nextMessage(host, ([c]) => c === "allowHost", "allowHost");
+  send(host, "request", { kookBind: ["hostQ", { guildId: "g1" }] });
+  await nextMessage(host, ([c]) => c === "kookBound", "kookBound");
+  const player = await connect(`${GAME_URL}/9023/p23`);
+  await nextMessage(player, ([c]) => c === "kookBound", "kookBound");
+  // drain the join-time (empty) bindings push
+  await nextMessage(player, ([c]) => c === "kookBindings", "initial kookBindings");
+
+  const bound = nextMessage(
+    player,
+    ([c, p]) => c === "kookBindings" && p.p23 === "kook1",
+    "bindings after bind"
+  );
+  send(player, "request", { kookBindUser: ["p23", { query: "玩家一#1234" }] });
+  await bound;
+
+  const cleared = nextMessage(
+    player,
+    ([c, p]) => c === "kookBindings" && !p.p23,
+    "bindings after unbind"
+  );
+  send(player, "request", { kookUnbindUser: ["p23", null] });
+  await cleared;
+
+  // unbinding again reports an error
+  const err = nextMessage(
+    player,
+    ([c, p]) => c === "kookError" && p.op === "unbindUser",
+    "kookError unbindUser"
+  );
+  send(player, "request", { kookUnbindUser: ["p23", null] });
+  await err;
+  host.close();
+  player.close();
+});
+
 // ------------------------------------------------------------------ runner
 (async () => {
   const roomManager = new RoomManager();
-  const game = new GameServer(roomManager).start(GAME_PORT);
+  const game = new GameServer(roomManager, makeFakeKook()).start(GAME_PORT);
   const lobby = new LobbyServer(roomManager).start(LOBBY_PORT);
   const api = new HttpApi().start(API_PORT);
   await sleep(300);

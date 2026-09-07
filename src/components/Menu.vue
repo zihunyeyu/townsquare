@@ -145,6 +145,16 @@
                   ]"
               /></em>
             </li>
+            <li @click="toggleRoleAvatar">
+              <small>角色标记作头像</small>
+              <em
+                ><font-awesome-icon
+                  :icon="[
+                    'fas',
+                    grimoire.isRoleAvatar ? 'check-square' : 'square'
+                  ]"
+              /></em>
+            </li>
             <!-- <li v-if="!edition.isOfficial" @click="toggleForwardEvilInfo">
               <small>提前邪恶互认和信息</small>
               <em
@@ -1231,7 +1241,6 @@ export default {
         }
 
         this.listeningFrame = requestAnimationFrame(detectSpeechActivity);
-        this.$store.commit("session/setListeningFrame", this.listeningFrame);
       }
 
       detectSpeechActivity();
@@ -1239,9 +1248,12 @@ export default {
     startListening(mode) {
       if (this.listeningFrame) return;
       if (mode != this.microphoneSetting) return;
-      
+
       this.initAudio().then(() => {
         this.runAudioDetection();
+        // publish the listening state once per session instead of every
+        // animation frame (App.vue checks it for push-to-talk)
+        this.$store.commit("session/setListeningFrame", this.listeningFrame);
       })
     },
     stopListening(mode) {
@@ -1253,6 +1265,17 @@ export default {
         this.listeningFrame = null;
         this.$store.commit("session/setListeningFrame", null);
       }
+      // release the microphone so the browser indicator turns off
+      if (this.audioStream) {
+        this.audioStream.getTracks().forEach(track => track.stop());
+        this.audioStream = null;
+      }
+      if (this.audioContext) {
+        this.audioContext.close();
+        this.audioContext = null;
+      }
+      this.source = null;
+      this.analyser = null;
       this.$store.commit("session/setTalking", {seatNum:this.session.claimedSeat, isTalking: false});
     },
     startEditingThreshold() {
@@ -1315,6 +1338,7 @@ export default {
       "toggleMuted",
       "toggleNightOrder",
       "toggleStatic",
+      "toggleRoleAvatar",
       "setZoom",
       "toggleModal"
     ])

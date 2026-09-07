@@ -22,6 +22,9 @@ module.exports = store => {
   if (localStorage.getItem("static")) {
     store.commit("toggleStatic", true);
   }
+  if (localStorage.getItem("roleAvatar")) {
+    store.commit("toggleRoleAvatar", true);
+  }
   if (localStorage.getItem("imageOptIn")) {
     store.commit("toggleImageOptIn", true);
   }
@@ -162,6 +165,22 @@ module.exports = store => {
   if (localStorage.getItem("playerAvatar")) {
     store.commit("session/updatePlayerAvatar", localStorage.getItem("playerAvatar"));
   }
+  if (localStorage.getItem("kookSelf")) {
+    const kookSelf = JSON.parse(localStorage.getItem("kookSelf"));
+    store.commit("kook/setSelfKook", {
+      id: kookSelf.id,
+      username: kookSelf.name
+    });
+  }
+  if (localStorage.getItem("kookGuildId")) {
+    store.commit("kook/setLastGuildId", localStorage.getItem("kookGuildId"));
+  }
+  if (localStorage.getItem("kookSelfQuery")) {
+    store.commit("kook/setSelfQuery", localStorage.getItem("kookSelfQuery"));
+  }
+  if (localStorage.getItem("kookLastCategory")) {
+    store.commit("kook/setLastCategoryId", localStorage.getItem("kookLastCategory"));
+  }
   if (localStorage.getItem("secretVote")) {
     store.commit("session/setSecretVote", JSON.parse(localStorage.getItem("secretVote")));
   }
@@ -177,6 +196,27 @@ module.exports = store => {
       });
     }
   }
+  // Batch heavy writes: a burst of mutations (e.g. applying a full gamestate
+  // sync) must not trigger a full serialize + synchronous write per mutation.
+  const debounceTimers = new Map();
+  const persistDebounced = (key, write, delay = 300) => {
+    if (debounceTimers.has(key)) clearTimeout(debounceTimers.get(key));
+    debounceTimers.set(
+      key,
+      setTimeout(() => {
+        debounceTimers.delete(key);
+        write();
+      }, delay)
+    );
+  };
+  const safeSet = (key, value) => {
+    try {
+      localStorage.setItem(key, value);
+    } catch (err) {
+      // QuotaExceededError / private-mode failures must not break commits
+    }
+  };
+
   // listen to mutations
   store.subscribe(({ type, payload }, state) => {
     switch (type) {
@@ -214,6 +254,13 @@ module.exports = store => {
           localStorage.setItem("static", 1);
         } else {
           localStorage.removeItem("static");
+        }
+        break;
+      case "toggleRoleAvatar":
+        if (state.grimoire.isRoleAvatar) {
+          localStorage.setItem("roleAvatar", 1);
+        } else {
+          localStorage.removeItem("roleAvatar");
         }
         break;
       case "toggleImageOptIn":
@@ -263,15 +310,16 @@ module.exports = store => {
         break;
       case "players/setBluff":
       case "players/updateBluff":
-        localStorage.setItem(
-          "bluffs",
-          JSON.stringify(state.players.bluffs.map(({ id }) => id))
+        persistDebounced("bluffs", () =>
+          safeSet(
+            "bluffs",
+            JSON.stringify(state.players.bluffs.map(({ id }) => id))
+          )
         );
         break;
       case "players/setFabled":
-        localStorage.setItem(
-          "fabled",
-          JSON.stringify(state.players.fabled)
+        persistDebounced("fabled", () =>
+          safeSet("fabled", JSON.stringify(state.players.fabled))
         );
         break;
       case "players/add":
@@ -281,20 +329,22 @@ module.exports = store => {
       case "players/set":
       case "players/swap":
       case "players/move":
-        if (state.players.players.length) {
-          localStorage.setItem(
-            "players",
-            JSON.stringify(
-              state.players.players.map(player => ({
-                ...player,
-                // simplify the stored data
-                role: player.role.id || {}
-              }))
-            )
-          );
-        } else {
-          localStorage.removeItem("players");
-        }
+        persistDebounced("players", () => {
+          if (state.players.players.length) {
+            safeSet(
+              "players",
+              JSON.stringify(
+                state.players.players.map(player => ({
+                  ...player,
+                  // simplify the stored data
+                  role: player.role.id || {}
+                }))
+              )
+            );
+          } else {
+            localStorage.removeItem("players");
+          }
+        });
         break;
       case "session/setSessionId":
         if (payload) {
@@ -381,11 +431,19 @@ module.exports = store => {
       case "session/createChatHistory":
       case "session/updateChatSent":
       case "session/updateChatReceived":
-        if (state.session.chatHistory) {
-          localStorage.setItem("chatHistory", JSON.stringify(state.session.chatHistory));
-        } else {
-          localStorage.removeItem("chatHistory");
-        }
+        persistDebounced("chatHistory", () => {
+          const history = state.session.chatHistory;
+          if (history) {
+            // cap the persisted history so writes stay cheap and small
+            const trimmed = history.map(entry => ({
+              ...entry,
+              chat: (entry.chat || []).slice(-100)
+            }));
+            safeSet("chatHistory", JSON.stringify(trimmed));
+          } else {
+            localStorage.removeItem("chatHistory");
+          }
+        });
         break;
       case "session/addGroupChat":
         {
@@ -442,6 +500,47 @@ module.exports = store => {
         break;
       case "session/updatePlayerAvatar":
         localStorage.setItem("playerAvatar", payload);
+        break;
+      case "kook/setSelfKook":
+        if (payload && payload.id) {
+          safeSet(
+            "kookSelf",
+            JSON.stringify({
+              id: payload.id,
+              name: payload.nickname || payload.username || ""
+            })
+          );
+          // persist the re-bind query alongside, so the account binding
+          // survives refreshes and backend restarts
+          if (payload.username && payload.identify_num) {
+            safeSet("kookSelfQuery", `${payload.username}#${payload.identify_num}`);
+          }
+        }
+        break;
+      case "kook/setLastGuildId":
+        if (payload) {
+          safeSet("kookGuildId", payload);
+        } else {
+          localStorage.removeItem("kookGuildId");
+        }
+        break;
+      case "kook/setSelfQuery":
+        if (payload) {
+          safeSet("kookSelfQuery", payload);
+        } else {
+          localStorage.removeItem("kookSelfQuery");
+        }
+        break;
+      case "kook/setLastCategoryId":
+        if (payload) {
+          safeSet("kookLastCategory", payload);
+        } else {
+          localStorage.removeItem("kookLastCategory");
+        }
+        break;
+      case "kook/clearSelfKook":
+        localStorage.removeItem("kookSelf");
+        localStorage.removeItem("kookSelfQuery");
         break;
       case "session/setSecretVote":
         localStorage.setItem("secretVote", JSON.stringify(payload));

@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>全员追忆 · 角色猜测助手</title>
+<style>
+  :root {
+    --bg: #0f1420; --card: #1a2233; --card2: #222d45; --border: #33415e;
+    --text: #e6ebf5; --dim: #8fa0c0; --accent: #d4af37; --accent2: #7c5cff;
+    --good: #4caf7d; --bad: #e05c5c; --mid: #e0a85c; --near: #5ca8e0;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: "Microsoft YaHei", "PingFang SC", sans-serif; padding: 16px; }
+  h1 { font-size: 22px; color: var(--accent); text-align: center; margin: 8px 0 4px; }
+  .subtitle { text-align: center; color: var(--dim); font-size: 13px; margin-bottom: 16px; }
+  .wrap { max-width: 1080px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+  .card h2 { font-size: 15px; color: var(--accent); margin-bottom: 10px; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+  .full { grid-column: 1 / -1; }
+  label { font-size: 13px; color: var(--dim); display: block; margin: 8px 0 4px; }
+  input[type=text], input[type=password], textarea, select {
+    width: 100%; background: var(--card2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 8px 10px; font-size: 14px; outline: none;
+  }
+  input:focus, textarea:focus, select:focus { border-color: var(--accent2); }
+  textarea { resize: vertical; min-height: 60px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .row > * { flex: 1; }
+  button {
+    background: var(--accent2); color: #fff; border: none; border-radius: 6px;
+    padding: 9px 18px; font-size: 14px; cursor: pointer; transition: opacity .15s;
+  }
+  button:hover { opacity: .85; }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  button.gold { background: var(--accent); color: #1a1a1a; font-weight: bold; }
+  button.ghost { background: transparent; border: 1px solid var(--border); color: var(--dim); padding: 6px 12px; font-size: 13px; }
+  .reply-group { display: flex; gap: 6px; margin: 6px 0; }
+  .reply-group label { flex: 1; margin: 0; }
+  .reply-group input { display: none; }
+  .reply-group span {
+    display: block; text-align: center; padding: 8px 0; border-radius: 6px; font-size: 14px;
+    background: var(--card2); border: 1px solid var(--border); cursor: pointer; color: var(--dim);
+  }
+  .reply-group input:checked + span.r0 { background: var(--bad); color: #fff; border-color: var(--bad); }
+  .reply-group input:checked + span.r1 { background: var(--mid); color: #fff; border-color: var(--mid); }
+  .reply-group input:checked + span.r2 { background: var(--near); color: #fff; border-color: var(--near); }
+  .reply-group input:checked + span.r3 { background: var(--good); color: #fff; border-color: var(--good); }
+  .tabs { display: flex; gap: 6px; margin-bottom: 8px; }
+  .tabs button { flex: 1; background: var(--card2); color: var(--dim); border: 1px solid var(--border); padding: 7px 0; }
+  .tabs button.active { background: var(--accent2); color: #fff; border-color: var(--accent2); }
+  .hist-item {
+    display: flex; align-items: center; gap: 8px; background: var(--card2);
+    border-radius: 6px; padding: 8px 10px; margin-bottom: 6px; font-size: 13px;
+  }
+  .hist-item .gtext { flex: 1; word-break: break-all; }
+  .badge { padding: 2px 8px; border-radius: 10px; font-size: 12px; white-space: nowrap; }
+  .badge.b0 { background: var(--bad); } .badge.b1 { background: var(--mid); }
+  .badge.b2 { background: var(--near); } .badge.b3 { background: var(--good); }
+  .hist-item .del { color: var(--dim); cursor: pointer; border: none; background: none; padding: 0 4px; font-size: 15px; }
+  .hist-item .del:hover { color: var(--bad); }
+  .result-item { margin-bottom: 8px; }
+  .result-item .head { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 3px; }
+  .result-item .name { font-weight: bold; }
+  .result-item .teamtag { font-size: 11px; color: var(--dim); margin-left: 6px; }
+  .result-item .pct { color: var(--accent); font-variant-numeric: tabular-nums; }
+  .bar { height: 8px; background: var(--card2); border-radius: 4px; overflow: hidden; }
+  .bar > div { height: 100%; background: linear-gradient(90deg, var(--accent2), var(--accent)); border-radius: 4px; transition: width .4s; }
+  .result-item .ability { font-size: 12px; color: var(--dim); margin-top: 2px; display: none; }
+  .result-item:hover .ability { display: block; }
+  .pinned { border: 1px solid var(--good); border-radius: 8px; padding: 8px; background: rgba(76,175,125,.08); }
+  .pinned .pct { color: var(--good); font-weight: bold; }
+  .hint { font-size: 12px; color: var(--dim); margin-top: 8px; line-height: 1.6; }
+  .status { font-size: 13px; margin-top: 8px; min-height: 18px; }
+  .status.err { color: var(--bad); }
+  .status.ok { color: var(--good); }
+  .scrollbox { max-height: 520px; overflow-y: auto; padding-right: 4px; }
+  .scrollbox::-webkit-scrollbar { width: 6px; }
+  .scrollbox::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  @media (max-width: 860px) { .wrap { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<h1>全员追忆 · 角色猜测助手</h1>
+<div class="subtitle">基于自制剧本《全员追忆》（197 个角色，不含旅行者与传奇角色）—— 根据说书人“无关 / 有关 / 接近 / 完美”的回复推断你的真实角色</div>
+
+<div class="wrap">
+
+  <!-- 设置 -->
+  <div class="card full">
+    <h2>⚙ 设置（AI 接口 · OpenAI 兼容，可选）</h2>
+    <div class="row">
+      <div style="flex:1">
+        <label>服务商预设（各家的 Key 分别保存）</label>
+        <select id="preset">
+          <option value="deepseek" selected>DeepSeek</option>
+          <option value="kimi">Kimi（Moonshot）</option>
+          <option value="openai">OpenAI</option>
+          <option value="custom">自定义</option>
+        </select>
+      </div>
+      <div style="flex:2">
+        <label>API Key（保存在浏览器本地，不会上传）</label>
+        <input type="password" id="apiKey" placeholder="sk-...（留空则使用本地启发式分析）">
+      </div>
+      <div style="flex:1.4">
+        <label>API 地址（OpenAI 兼容）</label>
+        <input type="text" id="apiBase" value="https://api.deepseek.com/v1">
+      </div>
+      <div style="flex:1">
+        <label>模型</label>
+        <input type="text" id="apiModel" value="deepseek-chat">
+      </div>
+    </div>
+    <div class="hint">
+      支持任何 <b>OpenAI 兼容接口</b>：DeepSeek（<b>platform.deepseek.com</b>）、Kimi（<b>platform.moonshot.cn</b>）、OpenAI 或自建中转/本地模型（Ollama、One-API 等），选择预设会自动填充地址与模型，也可手动修改。
+      每个服务商的 Key / 地址 / 模型会<b>分别保存在浏览器本地</b>（localStorage），输入即保存，切换预设自动带出对应配置，不会上传到其他服务器。
+      不填写 Key 时页面自动使用关键词排除法分析。若浏览器提示跨域（CORS）错误，请将 API 地址改为你自己的代理/中转地址。
+      <b>推理模型（deepseek-v4-flash、deepseek-reasoner、R1 类）打分时会先长时间思考，单次分析可能需要 2~5 分钟</b>，页面会实时显示接收进度；追求速度建议用非推理模型（deepseek-chat、moonshot-v1-8k、gpt-4o-mini）。
+    </div>
+  </div>
+
+  <!-- 左栏 -->
+  <div>
+    <div class="card">
+      <h2>① 我的角色类型（抽取底牌时已知晓）</h2>
+      <select id="teamFilter">
+        <option value="全部">全部 / 不确定</option>
+        <option value="镇民" selected>镇民（101 个）</option>
+        <option value="外来者">外来者（31 个）</option>
+        <option value="爪牙">爪牙（36 个）</option>
+        <option value="恶魔">恶魔（29 个）</option>
+      </select>
+      <div class="hint" id="candCount"></div>
+    </div>
+
+    <div class="card" style="margin-top:14px">
+      <h2>② 记录白天的问题（拜谒说书人）</h2>
+      <div class="row" style="align-items:center;margin-bottom:8px">
+        <span style="flex:0 0 auto;font-size:14px">📅 第 <b id="dayNum">1</b> 天</span>
+        <span class="badge b2" id="quotaTag" style="flex:0 0 auto">今日 0/2</span>
+        <button class="ghost" id="newDay" style="flex:0 0 auto">→ 新的一天</button>
+      </div>
+      <div class="tabs">
+        <button id="tabRole" class="active">角色问题</button>
+        <button id="tabRange">范围问题</button>
+      </div>
+      <div id="paneRole">
+        <label>你询问的角色（可输入关键字筛选）</label>
+        <input type="text" id="roleInput" list="roleList" placeholder="例如：占卜师">
+        <datalist id="roleList"></datalist>
+      </div>
+      <div id="paneRange" style="display:none">
+        <label>你询问的范围（每天至多 1 个范围问题）</label>
+        <input type="text" id="rangeInput" placeholder="例如：与夜晚有关 / 信息类能力 / 与死亡有关">
+      </div>
+      <label>说书人的回复</label>
+      <div class="reply-group">
+        <label><input type="radio" name="reply" value="无关"><span class="r0">无关</span></label>
+        <label><input type="radio" name="reply" value="有关"><span class="r1">有关</span></label>
+        <label><input type="radio" name="reply" value="接近"><span class="r2">接近</span></label>
+        <label id="lblPerfect"><input type="radio" name="reply" value="完美"><span class="r3">完美</span></label>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button class="gold" id="addGuess">＋ 添加问题</button>
+      </div>
+      <div class="status err" id="addErr"></div>
+      <div class="status ok" id="lockTip" style="display:none">✔ 已得知「完美」，本局不能再提问。点「清空」可开始新的一局。</div>
+      <div class="hint">
+        规则：每天可问 <b>2</b> 个问题——1 个范围问题 + 1 个角色问题，两者顺序不限；范围问题的机会可改问角色问题（每天至多 2 个角色问题），但不能问 2 个范围问题。得知「完美」后本局不能再提问。
+        若你的能力与拜访说书人有关，拜谒时需向说书人声明「拜访」，此时能力也可以发动。
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:14px">
+      <h2>③ 提问历史 <button class="ghost" id="clearHist" style="float:right">清空（新的一局）</button></h2>
+      <div id="history"><div class="hint">暂无记录。每天可问 2 个问题（至多 1 个范围问题），记录回复后置信度会自动更新。</div></div>
+    </div>
+  </div>
+
+  <!-- 右栏：置信度 -->
+  <div class="card">
+    <h2>④ 置信度分析 <span id="modeTag" class="badge b2" style="float:right">排除法</span></h2>
+    <div class="row" style="margin-bottom:10px">
+      <button id="aiAnalyze">🤖 AI 分析</button>
+      <button class="ghost" id="localAnalyze" style="flex:0.6">↻ 关键词排除</button>
+    </div>
+    <div class="status" id="aiStatus"></div>
+    <div class="scrollbox" id="results"></div>
+    <div class="hint">
+      排除法规则：「无关」排除与问题含相同关键词的角色；「接近」排除不含关键词的角色；角色问题只要不是「完美」，被问角色本身即被排除。百分比仅为存活候选的排序参考。悬停条目可查看角色能力 / 排除原因。剧本规则③：无神论者 / 异端分子 / 狂热者 / 管家 / 隐士 / 杂耍艺人 / 魔术师 / 畸形秀演员 / 公主 / 失忆者 / 戏子类角色猜中会<b>直接完美</b>。
+    </div>
+  </div>
+
+</div>
+
+<script src="roles.js"></script>
+<script>
+(function () {
+  "use strict";
+  const ROLES = window.ROLES || [];
+  const $ = id => document.getElementById(id);
+  const REPLIES = ["无关", "有关", "接近", "完美"];
+  // 回复对数几率权重：正=更像，负=排除
+  const W = { "无关": -3.5, "有关": 2.2, "接近": 4.0, "完美": 0 };
+
+  let guesses = JSON.parse(localStorage.getItem("qyzy_guesses") || "[]");
+  // 旧数据迁移：补上 day / qtype 字段（旧的自由文本猜测归为范围问题）
+  guesses = guesses.map(g => g.qtype ? g : Object.assign({}, g, { day: g.day || 1, qtype: g.type === "role" ? "role" : "range" }));
+  let day = parseInt(localStorage.getItem("qyzy_day") || "1", 10) || 1;
+  let qMode = "role"; // role | range
+
+  /* ---------- API 配置本地储存（按服务商分别保存） ---------- */
+  const PRESETS = {
+    deepseek: { base: "https://api.deepseek.com/v1", model: "deepseek-chat" },
+    kimi:     { base: "https://api.moonshot.cn/v1",  model: "moonshot-v1-32k" },
+    openai:   { base: "https://api.openai.com/v1",   model: "gpt-4o-mini" }
+  };
+  let apiConf = {};
+  try { apiConf = JSON.parse(localStorage.getItem("qyzy_apiconf") || "{}"); } catch (e) { apiConf = {}; }
+  // 迁移旧版单份配置到当前预设槽位
+  if (!Object.keys(apiConf).length && (localStorage.getItem("qyzy_apiKey") || localStorage.getItem("qyzy_apiBase"))) {
+    apiConf[localStorage.getItem("qyzy_preset") || "custom"] = {
+      key: localStorage.getItem("qyzy_apiKey") || "",
+      base: localStorage.getItem("qyzy_apiBase") || "",
+      model: localStorage.getItem("qyzy_apiModel") || ""
+    };
+    ["qyzy_apiKey", "qyzy_apiBase", "qyzy_apiModel"].forEach(k => localStorage.removeItem(k));
+  }
+  function saveConf() {
+    apiConf[$("preset").value] = {
+      key: $("apiKey").value.trim(),
+      base: $("apiBase").value.trim(),
+      model: $("apiModel").value.trim()
+    };
+    localStorage.setItem("qyzy_apiconf", JSON.stringify(apiConf));
+  }
+  function loadConf(p) {
+    const c = apiConf[p] || {};
+    $("apiKey").value = c.key || "";
+    $("apiBase").value = c.base || (PRESETS[p] ? PRESETS[p].base : "");
+    $("apiModel").value = c.model || (PRESETS[p] ? PRESETS[p].model : "");
+  }
+  $("preset").value = localStorage.getItem("qyzy_preset") || "deepseek";
+  loadConf($("preset").value);
+  // 输入即保存（无需等失焦），切换到哪个服务商就存到哪个槽位
+  ["apiKey", "apiBase", "apiModel"].forEach(k => $(k).addEventListener("input", saveConf));
+  $("preset").addEventListener("change", () => {
+    localStorage.setItem("qyzy_preset", $("preset").value);
+    loadConf($("preset").value);
+  });
+  $("teamFilter").value = localStorage.getItem("qyzy_team") || "镇民";
+  if (!$("teamFilter").value) $("teamFilter").value = "镇民"; // 缓存值已失效（如旧的“旅行者”选项）
+  $("teamFilter").addEventListener("change", () => {
+    localStorage.setItem("qyzy_team", $("teamFilter").value);
+    refreshCandidates(); runLocal();
+  });
+
+  /* ---------- 候选池 ---------- */
+  let candidates = [];
+  function refreshCandidates() {
+    const t = $("teamFilter").value;
+    candidates = t === "全部" ? ROLES.slice() : ROLES.filter(r => r.team === t);
+    $("candCount").textContent = `当前候选池：${candidates.length} 个角色`;
+    const dl = $("roleList"); dl.innerHTML = "";
+    candidates.forEach(r => {
+      const o = document.createElement("option");
+      o.value = r.name; o.label = r.team; dl.appendChild(o);
+    });
+  }
+
+  /* ---------- 问题录入（每日 2 问：至多 1 个范围问题；完美后锁定） ---------- */
+  const isLocked = () => guesses.some(g => g.qtype === "role" && g.reply === "完美");
+  const todayQs = () => guesses.filter(g => g.day === day);
+
+  function setQMode(m) {
+    qMode = m;
+    $("tabRole").classList.toggle("active", m === "role");
+    $("tabRange").classList.toggle("active", m === "range");
+    $("paneRole").style.display = m === "role" ? "" : "none";
+    $("paneRange").style.display = m === "range" ? "" : "none";
+    // 范围问题没有“完美”回复
+    const pi = $("lblPerfect").querySelector("input");
+    pi.disabled = m === "range";
+    $("lblPerfect").style.opacity = m === "range" ? ".35" : "1";
+    if (m === "range" && pi.checked) pi.checked = false;
+  }
+  $("tabRole").onclick = () => setQMode("role");
+  $("tabRange").onclick = () => setQMode("range");
+
+  function refreshDayUI() {
+    $("dayNum").textContent = day;
+    const tq = todayQs();
+    const ranges = tq.filter(g => g.qtype === "range").length;
+    $("quotaTag").textContent = `今日 ${tq.length}/2（范围 ${ranges}/1）`;
+    const lock = isLocked();
+    $("lockTip").style.display = lock ? "" : "none";
+    $("addGuess").disabled = lock;
+    $("newDay").disabled = lock;
+  }
+
+  $("addGuess").onclick = () => {
+    $("addErr").textContent = "";
+    if (isLocked()) { $("addErr").textContent = "已得知「完美」，本局不能再提问。"; return; }
+    const tq = todayQs();
+    if (tq.length >= 2) { $("addErr").textContent = "今天的两个问题已问完，请点击「新的一天」。"; return; }
+    if (qMode === "range" && tq.some(g => g.qtype === "range")) { $("addErr").textContent = "今天已问过范围问题（范围机会可改问角色问题，但不能问两个范围问题）。"; return; }
+    const reply = (document.querySelector("input[name=reply]:checked") || {}).value;
+    if (!reply) { $("addErr").textContent = "请选择说书人的回复。"; return; }
+    let g = { day, qtype: qMode, reply };
+    if (qMode === "role") {
+      const name = $("roleInput").value.trim();
+      const role = ROLES.find(r => r.name === name);
+      if (!role) { $("addErr").textContent = "请从候选列表中选择一个存在的角色。"; return; }
+      g.roleId = role.id; g.name = role.name; g.text = role.name + "：" + role.ability;
+    } else {
+      const text = $("rangeInput").value.trim();
+      if (text.length < 2) { $("addErr").textContent = "请输入你询问的范围。"; return; }
+      g.text = text;
+    }
+    guesses.push(g);
+    save(); renderHistory(); runLocal(); refreshDayUI();
+    $("roleInput").value = ""; $("rangeInput").value = "";
+    document.querySelectorAll("input[name=reply]").forEach(r => r.checked = false);
+  };
+  $("newDay").onclick = () => {
+    if (isLocked()) return;
+    day++;
+    localStorage.setItem("qyzy_day", String(day));
+    refreshDayUI();
+  };
+  $("clearHist").onclick = () => {
+    guesses = []; day = 1;
+    localStorage.setItem("qyzy_day", "1");
+    save(); renderHistory(); runLocal(); refreshDayUI();
+  };
+  function save() { localStorage.setItem("qyzy_guesses", JSON.stringify(guesses)); }
+
+  function renderHistory() {
+    const box = $("history");
+    if (!guesses.length) { box.innerHTML = '<div class="hint">暂无记录。每天可问 2 个问题（至多 1 个范围问题），记录回复后置信度会自动更新。</div>'; return; }
+    box.innerHTML = "";
+    const days = [...new Set(guesses.map(g => g.day))].sort((a, b) => a - b);
+    days.forEach(d => {
+      const h = document.createElement("div");
+      h.className = "hint";
+      h.style.cssText = "margin:8px 0 4px;color:var(--accent)";
+      h.textContent = `— 第 ${d} 天 —`;
+      box.appendChild(h);
+      guesses.forEach((g, i) => {
+        if (g.day !== d) return;
+        const div = document.createElement("div");
+        div.className = "hist-item";
+        const ri = REPLIES.indexOf(g.reply);
+        const qt = g.qtype === "range" ? "范围" : "角色";
+        const txt = g.qtype === "role" ? "【" + g.name + "】" : g.text;
+        div.innerHTML = `<span class="badge" style="background:var(--bg);border:1px solid var(--border);color:var(--dim)">${qt}</span>
+          <span class="gtext">${escapeHtml(txt)}</span>
+          <span class="badge b${ri}">${g.reply}</span>`;
+        const del = document.createElement("button");
+        del.className = "del"; del.textContent = "✕";
+        del.onclick = () => { guesses.splice(i, 1); save(); renderHistory(); runLocal(); refreshDayUI(); };
+        div.appendChild(del);
+        box.appendChild(div);
+      });
+    });
+  }
+  function escapeHtml(s) { return s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+
+  /* ---------- 本地分析：关键词排除法 ---------- */
+  function bigrams(s) {
+    const clean = s.replace(/[\s，。：:；;、（）()「」“”"']/g, "");
+    const m = new Map();
+    for (let i = 0; i < clean.length - 1; i++) {
+      const g = clean.slice(i, i + 2);
+      m.set(g, (m.get(g) || 0) + 1);
+    }
+    return m;
+  }
+  const roleFeat = new Map();
+  ROLES.forEach(r => roleFeat.set(r.id, bigrams(r.name + r.name + r.name + r.ability)));
+  function cosine(a, b) {
+    let dot = 0, na = 0, nb = 0;
+    a.forEach((v, k) => { na += v * v; if (b.has(k)) dot += v * b.get(k); });
+    b.forEach(v => nb += v * v);
+    return na && nb ? dot / Math.sqrt(na * nb) : 0;
+  }
+  // 游戏机制关键词（同义归组）：问题与角色能力按命中的组做排除
+  const SYNONYMS = [
+    ["夜晚", "夜间", "晚上", "夜里"], ["白天"], ["首夜", "首个夜晚", "第一个夜晚"],
+    ["死亡", "死于", "被杀", "死去"], ["处决"], ["提名"], ["投票", "票数"],
+    ["恶魔"], ["爪牙"], ["镇民"], ["外来者"], ["善良"], ["邪恶"], ["阵营"],
+    ["得知", "信息", "知晓", "知道"], ["选择", "挑选", "选中"], ["中毒"],
+    ["醉酒", "喝醉"], ["疯狂"], ["保护", "守护"], ["免疫"], ["复活", "重生"],
+    ["交换", "互换"], ["角色", "身份"], ["能力", "技能"], ["标记", "指示物"],
+    ["座位", "邻座", "相邻", "邻居"], ["说书人"], ["拜访", "拜谒"], ["唤醒"],
+    ["猜测"], ["限一次", "仅限一次"]
+  ];
+  function kwGroups(text) {
+    const hit = [];
+    SYNONYMS.forEach((grp, gi) => { if (grp.some(w => text.includes(w))) hit.push(gi); });
+    return hit;
+  }
+  const roleGroups = new Map();
+  ROLES.forEach(r => roleGroups.set(r.id, new Set(kwGroups(r.name + r.ability))));
+
+  function localScores() {
+    const pinned = guesses.filter(g => g.reply === "完美" && g.qtype === "role").map(g => g.roleId);
+    const pinSet = new Set(pinned);
+    const elim = new Map();   // roleId -> 排除原因
+    const conflicts = [];     // 为避免清空候选池而被跳过的排除
+    // 批量排除；若会清空存活池则跳过（记录为矛盾）
+    function tryElim(ids, reason) {
+      ids = ids.filter(id => !elim.has(id));
+      if (!ids.length) return;
+      const left = candidates.filter(r => !elim.has(r.id) && !ids.includes(r.id));
+      if (!left.length) { conflicts.push(reason); return; }
+      ids.forEach(id => elim.set(id, reason));
+    }
+    guesses.forEach(g => {
+      if (g.reply === "完美") return;
+      const gf = bigrams(g.text);
+      if (g.qtype === "role") {
+        // 非完美的角色问题：先排除被问角色本身
+        tryElim([g.roleId], `第${g.day}天问过【${g.name}】，回复「${g.reply}」非完美`);
+        if (g.reply === "无关") {
+          // 与该角色高度相似的也一并排除
+          tryElim(candidates.filter(r => r.id !== g.roleId && cosine(gf, roleFeat.get(r.id)) >= 0.30).map(r => r.id),
+            `与第${g.day}天【${g.name}】相似，但回复「无关」`);
+        } else if (g.reply === "接近") {
+          // 与该角色明显不相似的排除
+          tryElim(candidates.filter(r => r.id !== g.roleId && cosine(gf, roleFeat.get(r.id)) < 0.15).map(r => r.id),
+            `与第${g.day}天【${g.name}】不「接近」`);
+        }
+      } else {
+        const G = kwGroups(g.text);
+        if (G.length) {
+          if (g.reply === "无关") {
+            tryElim(candidates.filter(r => G.some(gi => roleGroups.get(r.id).has(gi))).map(r => r.id),
+              `含关键词「${g.text}」，但第${g.day}天回复「无关」`);
+          } else if (g.reply === "接近") {
+            tryElim(candidates.filter(r => !G.some(gi => roleGroups.get(r.id).has(gi))).map(r => r.id),
+              `不含关键词「${g.text}」，与第${g.day}天回复「接近」不符`);
+          }
+        } else {
+          // 未命中关键词时退回文本相似度阈值
+          if (g.reply === "无关") tryElim(candidates.filter(r => cosine(gf, roleFeat.get(r.id)) >= 0.35).map(r => r.id), `与第${g.day}天「${g.text}」相似但回复「无关」`);
+          if (g.reply === "接近") tryElim(candidates.filter(r => cosine(gf, roleFeat.get(r.id)) < 0.15).map(r => r.id), `与第${g.day}天「${g.text}」不「接近」`);
+        }
+      }
+    });
+    if (pinSet.size) candidates.forEach(r => { if (!pinSet.has(r.id)) elim.set(r.id, "已得知「完美」"); });
+    // 存活者按对数几率排序（与排除相互独立，仅影响先后顺序）
+    const logits = new Map(candidates.map(r => [r.id, 0]));
+    guesses.forEach(g => {
+      if (g.reply === "完美") return;
+      const gf = bigrams(g.text);
+      candidates.forEach(r => {
+        let s = cosine(gf, roleFeat.get(r.id));
+        if (g.qtype === "role" && g.roleId === r.id) s = Math.max(s, 1);
+        logits.set(r.id, logits.get(r.id) + s * W[g.reply]);
+      });
+    });
+    let arr = candidates.filter(r => !elim.has(r.id)).map(r => ({ role: r, logit: logits.get(r.id) }));
+    const max = arr.length ? Math.max(...arr.map(a => a.logit)) : 0;
+    let sum = 0;
+    arr.forEach(a => { a.p = Math.exp(a.logit - max); sum += a.p; });
+    arr.forEach(a => a.pct = a.p / sum * 100);
+    arr.sort((a, b) => b.pct - a.pct);
+    const dead = candidates.filter(r => elim.has(r.id)).map(r => ({ role: r, reason: elim.get(r.id) }));
+    dead.sort((a, b) => a.role.name.localeCompare(b.role.name, "zh"));
+    return { arr, dead, pinned, conflicts };
+  }
+
+  function runLocal() {
+    $("modeTag").textContent = "排除法";
+    $("modeTag").className = "badge b2";
+    if (!guesses.length) { renderResults(candidates.map(r => ({ role: r, pct: 100 / candidates.length })), []); return; }
+    const { arr, dead, pinned, conflicts } = localScores();
+    renderResults(arr, pinned, dead, conflicts);
+  }
+  $("localAnalyze").onclick = runLocal;
+
+  /* ---------- AI 分析（OpenAI 兼容接口） ---------- */
+  $("aiAnalyze").onclick = async () => {
+    const key = $("apiKey").value.trim();
+    const st = $("aiStatus");
+    st.className = "status"; st.textContent = "";
+    if (!key) { st.className = "status err"; st.textContent = "未填写 API Key，已改用关键词排除法。"; runLocal(); return; }
+    if (!guesses.length) { st.className = "status err"; st.textContent = "请先添加至少一条提问记录。"; return; }
+    $("aiAnalyze").disabled = true;
+    st.textContent = "AI 分析中，请稍候…";
+    try {
+      const hist = guesses.map(g => {
+        const q = g.qtype === "role"
+          ? `角色问题「${g.name}（能力：${g.text.split("：")[1]}）」`
+          : `范围问题「${g.text}」`;
+        return `第${g.day}天 ${q} → 说书人回复：${g.reply}`;
+      }).join("\n");
+      const list = candidates.map(r => ({ id: r.id, name: r.name, ability: r.ability }));
+      const prompt =
+        `你是桌游《染·钟楼谜团》的说书人助手。当前是自制剧本《全员追忆》：所有玩家都像官方角色"失忆者"一样，不知道自己的具体角色，只能知道自己能力的触发效果。每个白天玩家可以拜谒说书人提问（每天至多 2 个问题，其中范围问题至多 1 个），问题分两种：\n` +
+        `- 范围问题：玩家询问自己能力所属的范畴（如"与夜晚有关""信息类能力"），说书人回复"无关/有关/接近"，表示真实能力落入该范围的程度；\n` +
+        `- 角色问题：玩家直接询问自己是不是某个角色，说书人回复"无关/有关/接近/完美"，"完美"表示完全猜中（此后不能再提问）。\n` +
+        `该玩家的真实角色类型是【${$("teamFilter").value}】。\n\n` +
+        `提问历史：\n${hist}\n\n` +
+        `候选角色列表（JSON）：\n${JSON.stringify(list)}\n\n` +
+        `请综合全部提问历史，为每个候选角色评估"该玩家的真实角色就是它"的置信度（0-100 的数字，不要求总和为 100）。评分要点：\n` +
+        `- 角色问题回复"完美"：该角色 100 分，其余角色应极低；\n` +
+        `- 角色问题回复"接近"：该角色能力与被问角色高度相似（同一核心机制，仅细节差异）→ 应显著高于其他；\n` +
+        `- 回复"有关"：角色能力与被问角色/被问范围在机制或关键词上相关；\n` +
+        `- 回复"无关"：角色能力与被问角色/被问范围基本不相似 → 落入该范围或与该角色相似的角色都应被压低。\n` +
+        `只输出 JSON 数组，格式 [{"id":"角色id","score":分数}]，不要输出任何其他文字、解释或 markdown 代码块。`;
+      const base = $("apiBase").value.trim().replace(/\/+$/, "");
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 480000); // 8 分钟超时（推理模型较慢）
+      let resp;
+      try {
+        resp = await fetch(base + "/chat/completions", {
+          method: "POST",
+          signal: ctrl.signal,
+          headers: { "Content-Type": "application/json", "Authorization": "Bearer " + key },
+          body: JSON.stringify({
+            model: $("apiModel").value.trim() || "deepseek-chat",
+            temperature: 0.3,
+            stream: true,
+            messages: [{ role: "user", content: prompt }]
+          })
+        });
+      } catch (e) {
+        clearTimeout(timer);
+        throw new Error(e.name === "AbortError" ? "请求超时（8 分钟）" : "网络错误（可能跨域被拦）：" + e.message);
+      }
+      if (!resp.ok) { clearTimeout(timer); throw new Error("HTTP " + resp.status + "：" + (await resp.text()).slice(0, 200)); }
+      // 流式读取（SSE），实时显示进度；推理模型的 reasoning_content 不计入正文
+      let content = "";
+      const t0 = Date.now();
+      if (resp.body && resp.body.getReader) {
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder("utf-8");
+        let buf = "";
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buf += decoder.decode(value, { stream: true });
+            const lines = buf.split("\n");
+            buf = lines.pop();
+            for (const line of lines) {
+              const s = line.trim();
+              if (!s.startsWith("data:")) continue;
+              const payload = s.slice(5).trim();
+              if (!payload || payload === "[DONE]") continue;
+              try {
+                const j = JSON.parse(payload);
+                const d = j.choices && j.choices[0] && j.choices[0].delta;
+                if (d && d.content) content += d.content;
+              } catch (e) { /* 忽略不完整的分片 */ }
+            }
+            st.textContent = `AI 分析中… 已用时 ${Math.round((Date.now() - t0) / 1000)}s，已接收 ${content.length} 字（推理模型可能需要 2~5 分钟）`;
+          }
+        } catch (e) {
+          clearTimeout(timer);
+          throw new Error(e.name === "AbortError" ? "请求超时（8 分钟）" : "读取响应流失败：" + e.message);
+        }
+      } else {
+        const data = await resp.json(); // 不支持流时的兜底
+        content = (data.choices && data.choices[0] && data.choices[0].message.content) || "";
+      }
+      clearTimeout(timer);
+      if (!content.trim()) throw new Error("模型未返回正文内容（推理模型的思考可能耗尽了输出额度，建议换用非推理模型，如 deepseek-chat / moonshot-v1-8k / gpt-4o-mini）");
+      // 提取 JSON 数组；若输出被截断则补全到最后一个完整对象
+      let m = content.match(/\[[\s\S]*\]/);
+      let txt = m ? m[0] : null;
+      if (!txt) {
+        const i = content.indexOf("["), j = content.lastIndexOf("}");
+        if (i >= 0 && j > i) txt = content.slice(i, j + 1) + "]";
+      }
+      if (!txt) throw new Error("模型未返回 JSON：" + content.slice(0, 120));
+      let scores;
+      try { scores = JSON.parse(txt); } catch (e) { throw new Error("JSON 解析失败：" + e.message); }
+      // 按 id 匹配，模型若返回角色名也能兜底
+      const byKey = new Map();
+      scores.forEach(s => {
+        const v = Math.max(0, Math.min(100, Number(s.score) || 0));
+        if (s.id != null) byKey.set(String(s.id), v);
+        if (s.name != null) byKey.set(String(s.name), v);
+      });
+      let arr = candidates.map(r => ({ role: r, raw: byKey.has(r.id) ? byKey.get(r.id) : (byKey.get(r.name) || 0) }));
+      const matched = arr.filter(a => a.raw > 0).length;
+      const sum = arr.reduce((a, b) => a + b.raw, 0) || 1;
+      arr.forEach(a => a.pct = a.raw / sum * 100);
+      arr.sort((a, b) => b.pct - a.pct);
+      const pinned = guesses.filter(g => g.reply === "完美" && g.qtype === "role").map(g => g.roleId);
+      $("modeTag").textContent = "AI 分析";
+      $("modeTag").className = "badge b3";
+      renderResults(arr, pinned);
+      st.className = "status ok";
+      st.textContent = `分析完成（${Math.round((Date.now() - t0) / 1000)}s，${scores.length} 条评分 / 命中 ${matched} 个候选角色）。`;
+    } catch (e) {
+      st.className = "status err";
+      st.textContent = "AI 分析失败：" + e.message;
+    } finally {
+      $("aiAnalyze").disabled = false;
+    }
+  };
+
+  /* ---------- 渲染结果 ---------- */
+  function renderResults(arr, pinned, dead, conflicts) {
+    const box = $("results");
+    box.innerHTML = "";
+    const pinSet = new Set(pinned || []);
+    const pinnedRoles = arr.filter(a => pinSet.has(a.role.id));
+    const rest = arr.filter(a => !pinSet.has(a.role.id));
+    pinnedRoles.forEach(a => { a.pct = 100; });
+    const show = pinnedRoles.concat(rest.slice(0, 30));
+    if (pinnedRoles.length) {
+      const tip = document.createElement("div");
+      tip.className = "hint"; tip.style.color = "var(--good)";
+      tip.textContent = "✔ 已获得“完美”回复，以下角色即为你的真实角色：";
+      box.appendChild(tip);
+    }
+    if (!arr.length && !pinnedRoles.length) {
+      const tip = document.createElement("div");
+      tip.className = "hint";
+      tip.textContent = "所有候选角色均被排除——记录之间可能存在矛盾，请检查提问历史。";
+      box.appendChild(tip);
+    }
+    show.forEach(a => {
+      const div = document.createElement("div");
+      div.className = "result-item" + (pinSet.has(a.role.id) ? " pinned" : "");
+      div.innerHTML =
+        `<div class="head"><span><span class="name">${escapeHtml(a.role.name)}</span><span class="teamtag">${a.role.team}</span></span>` +
+        `<span class="pct">${pinSet.has(a.role.id) ? "完美 ✔" : a.pct.toFixed(1) + "%"}</span></div>` +
+        `<div class="bar"><div style="width:${Math.min(100, a.pct).toFixed(1)}%"></div></div>` +
+        `<div class="ability">${escapeHtml(a.role.ability)}</div>`;
+      box.appendChild(div);
+    });
+    if (rest.length > 30) {
+      const more = document.createElement("div");
+      more.className = "hint";
+      more.textContent = `…… 其余 ${rest.length - 30} 个存活候选置信度过低，已省略。`;
+      box.appendChild(more);
+    }
+    if (conflicts && conflicts.length) {
+      const c = document.createElement("div");
+      c.className = "hint"; c.style.color = "var(--mid)";
+      c.textContent = `⚠ 有 ${conflicts.length} 次排除与先前记录矛盾，已自动跳过（如：${conflicts[0]}）。`;
+      box.appendChild(c);
+    }
+    if (dead && dead.length) {
+      const h = document.createElement("div");
+      h.className = "hint";
+      h.style.cssText = "margin:12px 0 4px;color:var(--dim);border-top:1px solid var(--border);padding-top:8px";
+      h.textContent = `—— 已排除 ${dead.length} 个（悬停查看原因） ——`;
+      box.appendChild(h);
+      dead.slice(0, 40).forEach(d => {
+        const div = document.createElement("div");
+        div.className = "result-item";
+        div.style.opacity = ".5";
+        div.innerHTML =
+          `<div class="head"><span><span class="name" style="text-decoration:line-through">${escapeHtml(d.role.name)}</span><span class="teamtag">${d.role.team}</span></span><span class="pct">排除</span></div>` +
+          `<div class="ability" style="display:block">${escapeHtml(d.reason)}</div>`;
+        box.appendChild(div);
+      });
+      if (dead.length > 40) {
+        const more = document.createElement("div");
+        more.className = "hint";
+        more.textContent = `…… 其余 ${dead.length - 40} 个已排除角色从略。`;
+        box.appendChild(more);
+      }
+    }
+  }
+
+  /* ---------- 初始化 ---------- */
+  refreshCandidates();
+  setQMode("role");
+  refreshDayUI();
+  renderHistory();
+  runLocal();
+})();
+</script>
+</body>
+</html>

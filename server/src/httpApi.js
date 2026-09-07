@@ -132,22 +132,36 @@ class HttpApi {
   }
 
   _serveAvatar(filename, res) {
-    // prevent path traversal
-    if (!/^[A-Za-z0-9_-]{1,64}\.(png|webp|jpg|gif)$/.test(filename)) {
+    // prevent path traversal; hashed names are `{playerId}-{hash8}.{ext}`
+    if (!/^[A-Za-z0-9_-]{1,96}\.(png|webp|jpg|gif)$/.test(filename)) {
       return json(res, 400, { status: "error", message: "无效的文件名" });
     }
     const filePath = path.join(AVATAR_DIR, filename);
+    // built-in defaults (default.webp, default_storyteller.webp) live outside
+    // the avatar volume so they survive volume resets and are always available
+    const fallbackPath = path.join(__dirname, "defaults", filename);
     fs.readFile(filePath, (err, content) => {
       if (err) {
-        return json(res, 404, { status: "error", message: "not found" });
+        return fs.readFile(fallbackPath, (fbErr, fbContent) => {
+          if (fbErr) {
+            return json(res, 404, { status: "error", message: "not found" });
+          }
+          this._sendAvatarFile(filename, fbContent, res);
+        });
       }
-      const ext = filename.split(".").pop();
-      res.writeHead(200, {
-        "Content-Type": EXT_TO_MIME[ext] || "application/octet-stream",
-        "Cache-Control": "public, max-age=31536000, immutable",
-      });
-      res.end(content);
+      this._sendAvatarFile(filename, content, res);
     });
+  }
+
+  _sendAvatarFile(filename, content, res) {
+    const ext = filename.split(".").pop();
+    res.writeHead(200, {
+      "Content-Type": EXT_TO_MIME[ext] || "application/octet-stream",
+      // safe to cache forever: uploaded avatars are content-hashed, so a
+      // changed avatar always gets a new URL
+      "Cache-Control": "public, max-age=31536000, immutable",
+    });
+    res.end(content);
   }
 }
 

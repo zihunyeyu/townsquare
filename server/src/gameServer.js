@@ -41,8 +41,16 @@ function send(ws, command, params, feedback = false) {
   }
 }
 
+// Send a pre-serialized payload: use when the same message goes to several
+// clients so JSON.stringify runs once instead of once per recipient.
+function sendRaw(ws, data) {
+  if (ws && ws.readyState === 1) {
+    ws.send(data);
+  }
+}
+
 class GameServer {
-  constructor(roomManager) {
+  constructor(roomManager, kook = null) {
     this.roomManager = roomManager;
     // Reliable-delivery store: `${targetId}:${feedbackId}` ->
     //   { to, from, message }
@@ -50,6 +58,11 @@ class GameServer {
     // Recently processed uploadFile feedback ids (dedupe resends)
     this.processedUploads = new Map(); // id -> timestamp
     this.wss = null;
+    // KOOK voice integration (optional KookService; may be null/disabled)
+    this.kook = kook;
+    // roomId -> { voice, listener } for rooms bound to a KOOK guild
+    this._kookRooms = new Map();
+    this.roomManager.on("roomRemoved", (id) => this._detachKook(id));
   }
 
   /**
@@ -132,6 +145,10 @@ class GameServer {
       ws.isAlive = true;
       if (ws.pingSentAt) ws.latency = Date.now() - ws.pingSentAt;
     });
+    ws.on("error", (err) => {
+      // a single misbehaving client must never crash the process
+      console.error(`[game] ws error (${playerId}@${channel}):`, err.message);
+    });
 
     const room = this.roomManager.getOrCreate(channel);
     ws.meta = {
@@ -157,6 +174,9 @@ class GameServer {
         }
       }
     }
+
+    // KOOK voice state is server-held: push it to every new connection
+    this._pushKookState(ws, room);
 
     ws.on("message", (data) => {
       let parsed;
@@ -273,6 +293,25 @@ class GameServer {
         send(sender, "feedback", feedbackId);
         break;
       }
+      // --- KOOK voice integration ---------------------------------------
+      case "kookBind":
+        return this._kookBind(room, ws, reqParams);
+      case "kookUnbind":
+        return this._kookUnbind(room, ws);
+      case "kookBindUser":
+        return this._kookBindUser(room, ws, reqParams);
+      case "kookUnbindUser":
+        return this._kookUnbindUser(room, ws);
+      case "kookMove":
+        return this._kookMove(room, ws, reqParams);
+      case "kookMoveAll":
+        return this._kookMoveAll(room, ws, reqParams);
+      case "kookMute":
+        return this._kookMute(room, ws, reqParams);
+      case "kookSetCategory":
+        return this._kookSetCategory(room, ws, reqParams);
+      case "kookSync":
+        return this._pushKookState(ws, room);
       default:
         // unknown server-side request: ignore
         break;
@@ -287,9 +326,17 @@ class GameServer {
     const [playerId, dataUrl] = data;
     if (playerId !== ws.meta.playerId || typeof dataUrl !== "string") return;
     if (feedback) {
+      const now = Date.now();
       const seen = this.processedUploads.get(feedback);
-      if (seen && Date.now() - seen < 10 * 60 * 1000) return;
-      this.processedUploads.set(feedback, Date.now());
+      if (seen && now - seen < 10 * 60 * 1000) return;
+      this.processedUploads.set(feedback, now);
+      // bound the dedupe store: sweep expired entries once it grows large
+      if (this.processedUploads.size > 1000) {
+        const cutoff = now - 10 * 60 * 1000;
+        for (const [id, ts] of this.processedUploads) {
+          if (ts < cutoff) this.processedUploads.delete(id);
+        }
+      }
     }
     if (dataUrl.length > MAX_AVATAR_BASE64_LENGTH + 64) return;
     const filename = saveAvatar(playerId, dataUrl);
@@ -303,20 +350,380 @@ class GameServer {
   _handlePing(room, ws, params) {
     const [idOrCount] = Array.isArray(params) ? params : [0];
     send(ws, "pong");
-    const relayed = ["ping", [idOrCount, ws.latency || 0]];
+    // serialize once for all relay targets
+    const relayed = JSON.stringify(["ping", [idOrCount, ws.latency || 0]]);
     if (ws.meta.isHost) {
       for (const playerWs of room.players.values()) {
-        send(playerWs, ...relayed);
+        sendRaw(playerWs, relayed);
       }
     } else if (room.hasActiveHost()) {
-      send(room.host, ...relayed);
+      sendRaw(room.host, relayed);
     }
   }
 
   _broadcast(room, ws, envelope) {
-    if (room.host && room.host !== ws) send(room.host, ...envelope);
+    // serialize once for the whole room instead of once per recipient
+    const data = JSON.stringify(envelope);
+    if (room.host && room.host !== ws) sendRaw(room.host, data);
     for (const playerWs of room.players.values()) {
-      if (playerWs !== ws) send(playerWs, ...envelope);
+      if (playerWs !== ws) sendRaw(playerWs, data);
+    }
+  }
+
+  /** Broadcast an envelope to everyone in the room, sender included. */
+  _broadcastRoom(room, envelope) {
+    const data = JSON.stringify(envelope);
+    if (room.host) sendRaw(room.host, data);
+    for (const playerWs of room.players.values()) {
+      sendRaw(playerWs, data);
+    }
+  }
+
+  // --- KOOK voice integration -------------------------------------------
+
+  _kookVoiceOf(room) {
+    if (!room.kookGuildId || !this.kook) return null;
+    return this.kook.voices.get(room.kookGuildId) || null;
+  }
+
+  /** Push the current KOOK binding + voice state to one connection. */
+  _pushKookState(ws, room) {
+    const voice = this._kookVoiceOf(room);
+    if (!voice) return;
+    send(ws, "kookBound", {
+      guildId: room.kookGuildId,
+      guildName: voice.name,
+      guildIcon: voice.icon,
+      categoryId: room.kookCategoryId,
+    });
+    send(ws, "kookBindings", Object.fromEntries(room.kookBindings));
+    // remind the client of its own binding (e.g. after a page refresh)
+    const boundId = room.kookBindings.get(ws.meta.playerId);
+    if (boundId) {
+      const u = voice.users.get(boundId);
+      send(ws, "kookBoundUser", {
+        id: boundId,
+        username: (u && u.username) || "",
+        nickname: (u && u.nickname) || "",
+        avatar: (u && u.avatar) || "",
+        identify_num: (u && u.identify_num) || "",
+      });
+    }
+    if (voice.ready) send(ws, "kookVoice", voice.snapshot(room.kookCategoryId));
+  }
+
+  _detachKook(roomId) {
+    const entry = this._kookRooms.get(roomId);
+    if (!entry) return;
+    entry.voice.off("change", entry.listener);
+    this._kookRooms.delete(roomId);
+  }
+
+  /** request/kookBind: { guildId } - bind the room to a KOOK guild. */
+  async _kookBind(room, ws, params) {
+    if (!ws.meta.isHost) {
+      return send(ws, "kookError", {
+        op: "bind",
+        message: "仅说书人可以绑定 KOOK 服务器",
+      });
+    }
+    if (!this.kook || !this.kook.enabled()) {
+      return send(ws, "kookError", {
+        op: "bind",
+        message: "后端未配置 KOOK_BOT_TOKEN",
+      });
+    }
+    const guildId = String((params && params.guildId) || "").trim();
+    if (!guildId) {
+      return send(ws, "kookError", { op: "bind", message: "缺少 KOOK 服务器 ID" });
+    }
+    try {
+      const voice = await this.kook.getVoice(guildId);
+      this._detachKook(room.id);
+      room.kookGuildId = guildId;
+      room.kookCategoryId = null;
+      const listener = () => {
+        if (voice.ready) {
+          this._broadcastRoom(room, [
+            "kookVoice",
+            voice.snapshot(room.kookCategoryId),
+          ]);
+        }
+      };
+      voice.on("change", listener);
+      this._kookRooms.set(room.id, { voice, listener });
+      this._broadcastRoom(room, [
+        "kookBound",
+        {
+          guildId,
+          guildName: voice.name,
+          guildIcon: voice.icon,
+          categoryId: null,
+        },
+      ]);
+      this._broadcastRoom(room, [
+        "kookBindings",
+        Object.fromEntries(room.kookBindings),
+      ]);
+      listener();
+    } catch (err) {
+      send(ws, "kookError", { op: "bind", message: `绑定失败:${err.message}` });
+    }
+  }
+
+  /** request/kookUnbind - remove the room's KOOK binding. */
+  _kookUnbind(room, ws) {
+    if (!ws.meta.isHost) {
+      return send(ws, "kookError", { op: "unbind", message: "仅说书人可以解绑" });
+    }
+    this._detachKook(room.id);
+    room.kookGuildId = null;
+    room.kookCategoryId = null;
+    room.kookBindings.clear();
+    this._broadcastRoom(room, ["kookBound", null]);
+  }
+
+  /**
+   * request/kookSetCategory: { categoryId } - restrict this room's voice
+   * panel and voice operations to channels under one category (host).
+   * Empty/null lifts the restriction.
+   */
+  _kookSetCategory(room, ws, params) {
+    if (!ws.meta.isHost) {
+      return send(ws, "kookError", {
+        op: "setCategory",
+        message: "仅说书人可以设置分组",
+      });
+    }
+    const voice = this._kookVoiceOf(room);
+    if (!voice) {
+      return send(ws, "kookError", {
+        op: "setCategory",
+        message: "房间尚未绑定 KOOK 服务器",
+      });
+    }
+    const categoryId = String((params && params.categoryId) || "") || null;
+    if (categoryId) {
+      const cat = voice.channels.get(categoryId);
+      if (!cat || !cat.isCategory) {
+        return send(ws, "kookError", {
+          op: "setCategory",
+          message: "目标分组不存在",
+        });
+      }
+    }
+    room.kookCategoryId = categoryId;
+    this._broadcastRoom(room, [
+      "kookBound",
+      {
+        guildId: room.kookGuildId,
+        guildName: voice.name,
+        guildIcon: voice.icon,
+        categoryId,
+      },
+    ]);
+    if (voice.ready) {
+      this._broadcastRoom(room, ["kookVoice", voice.snapshot(categoryId)]);
+    }
+  }
+
+  /**
+   * request/kookBindUser: { query } - bind the sender's own KOOK account,
+   * looked up by "用户名#识别号" within the bound guild.
+   */
+  async _kookBindUser(room, ws, params) {
+    const voice = this._kookVoiceOf(room);
+    if (!voice) {
+      return send(ws, "kookError", {
+        op: "bindUser",
+        message: "房间尚未绑定 KOOK 服务器",
+      });
+    }
+    const query = String((params && params.query) || "").trim();
+    const match = /^(.+?)#(\d{4})$/.exec(query);
+    if (!match) {
+      return send(ws, "kookError", {
+        op: "bindUser",
+        message: "格式应为:KOOK用户名#识别号(如 张三#1234)",
+      });
+    }
+    let found;
+    try {
+      const members = await this.kook.api.guildUserList(
+        room.kookGuildId,
+        match[1]
+      );
+      found = members.find((u) => u.identify_num === match[2]) || null;
+    } catch (err) {
+      return send(ws, "kookError", { op: "bindUser", message: err.message });
+    }
+    if (!found) {
+      return send(ws, "kookError", {
+        op: "bindUser",
+        message: "该 KOOK 服务器中找不到此用户",
+      });
+    }
+    room.kookBindings.set(ws.meta.playerId, found.id);
+    voice.upsertUser(found);
+    this._broadcastRoom(room, [
+      "kookBindings",
+      Object.fromEntries(room.kookBindings),
+    ]);
+    send(ws, "kookBoundUser", {
+      id: found.id,
+      username: found.username,
+      nickname: found.nickname || "",
+      avatar: found.avatar || "",
+      identify_num: found.identify_num || "",
+    });
+  }
+
+  /** request/kookUnbindUser - remove the sender's own KOOK binding. */
+  _kookUnbindUser(room, ws) {
+    if (!room.kookBindings.delete(ws.meta.playerId)) {
+      return send(ws, "kookError", {
+        op: "unbindUser",
+        message: "你尚未绑定 KOOK 账号",
+      });
+    }
+    this._broadcastRoom(room, [
+      "kookBindings",
+      Object.fromEntries(room.kookBindings),
+    ]);
+  }
+
+  /** request/kookMove: { channelId } - move the sender's own KOOK user. */
+  _kookMove(room, ws, params) {
+    const voice = this._kookVoiceOf(room);
+    if (!voice) {
+      return send(ws, "kookError", {
+        op: "move",
+        message: "房间尚未绑定 KOOK 服务器",
+      });
+    }
+    const kookId = room.kookBindings.get(ws.meta.playerId);
+    if (!kookId) {
+      return send(ws, "kookError", {
+        op: "move",
+        message: "请先绑定你的 KOOK 账号",
+      });
+    }
+    const channelId = String((params && params.channelId) || "");
+    const channel = voice.channels.get(channelId);
+    if (!channel || channel.isCategory) {
+      return send(ws, "kookError", { op: "move", message: "目标语音频道不存在" });
+    }
+    if (room.kookCategoryId && channel.parentId !== room.kookCategoryId) {
+      return send(ws, "kookError", {
+        op: "move",
+        message: "该频道不在本局分组内",
+      });
+    }
+    // KOOK can only move users who are already in a voice channel
+    if (!voice.channelOfUser(kookId)) {
+      return send(ws, "kookError", {
+        op: "move",
+        message: "请先在 KOOK 客户端中进入任意语音频道",
+      });
+    }
+    this.kook.api
+      .moveUsers(channelId, [kookId])
+      .then(() => voice.moveLocal(kookId, channelId))
+      .catch((err) =>
+        send(ws, "kookError", { op: "move", message: err.message })
+      );
+  }
+
+  /** request/kookMoveAll: { channelId } - move every bound in-voice player. */
+  _kookMoveAll(room, ws, params) {
+    if (!ws.meta.isHost) {
+      return send(ws, "kookError", {
+        op: "moveAll",
+        message: "仅说书人可以全员移动",
+      });
+    }
+    const voice = this._kookVoiceOf(room);
+    if (!voice) {
+      return send(ws, "kookError", {
+        op: "moveAll",
+        message: "房间尚未绑定 KOOK 服务器",
+      });
+    }
+    const channelId = String((params && params.channelId) || "");
+    const channel = voice.channels.get(channelId);
+    if (!channel || channel.isCategory) {
+      return send(ws, "kookError", {
+        op: "moveAll",
+        message: "目标语音频道不存在",
+      });
+    }
+    if (room.kookCategoryId && channel.parentId !== room.kookCategoryId) {
+      return send(ws, "kookError", {
+        op: "moveAll",
+        message: "该频道不在本局分组内",
+      });
+    }
+    const userIds = [...new Set(room.kookBindings.values())].filter((id) =>
+      voice.channelOfUser(id)
+    );
+    if (!userIds.length) {
+      return send(ws, "kookError", {
+        op: "moveAll",
+        message: "没有已绑定且处于语音中的玩家",
+      });
+    }
+    this.kook.api
+      .moveUsers(channelId, userIds)
+      .then(() => {
+        for (const id of userIds) voice.moveLocal(id, channelId);
+      })
+      .catch((err) =>
+        send(ws, "kookError", { op: "moveAll", message: err.message })
+      );
+  }
+
+  /**
+   * request/kookMute: { userIds?, mute?, type? } - server-wide mute of the
+   * given (or all bound) KOOK users; type 1 = mic, 2 = headset.
+   */
+  async _kookMute(room, ws, params) {
+    if (!ws.meta.isHost) {
+      return send(ws, "kookError", {
+        op: "mute",
+        message: "仅说书人可以设置静音",
+      });
+    }
+    const voice = this._kookVoiceOf(room);
+    if (!voice) {
+      return send(ws, "kookError", {
+        op: "mute",
+        message: "房间尚未绑定 KOOK 服务器",
+      });
+    }
+    const mute = !params || params.mute !== false;
+    const type = params && params.type === 2 ? 2 : 1;
+    const userIds =
+      Array.isArray(params && params.userIds) && params.userIds.length
+        ? params.userIds
+        : [...new Set(room.kookBindings.values())];
+    if (!userIds.length) {
+      return send(ws, "kookError", {
+        op: "mute",
+        message: "没有已绑定 KOOK 的玩家",
+      });
+    }
+    // sequential calls to stay clear of rate limits
+    for (const id of userIds) {
+      try {
+        if (mute) {
+          await this.kook.api.muteUser(room.kookGuildId, id, type);
+        } else {
+          await this.kook.api.unmuteUser(room.kookGuildId, id, type);
+        }
+        voice.setMuteLocal(id, type, mute);
+      } catch (err) {
+        return send(ws, "kookError", { op: "mute", message: err.message });
+      }
     }
   }
 
@@ -324,9 +731,24 @@ class GameServer {
     if (ws.meta.isHost && room.host === ws) {
       this.roomManager.dropHost(room);
     } else if (!ws.meta.isHostCandidate) {
-      this.roomManager.removePlayer(room, ws.meta.playerId);
-      if (room.hasActiveHost()) {
-        send(room.host, "bye", ws.meta.playerId);
+      // pass the socket so the stale close of a superseded connection
+      // cannot remove a fresh one that reconnected with the same playerId
+      const removed = this.roomManager.removePlayer(
+        room,
+        ws.meta.playerId,
+        ws
+      );
+      if (removed) {
+        if (room.hasActiveHost()) {
+          send(room.host, "bye", ws.meta.playerId);
+        }
+        // drop the KOOK binding of a player who really left the room
+        if (room.kookBindings.delete(ws.meta.playerId)) {
+          this._broadcastRoom(room, [
+            "kookBindings",
+            Object.fromEntries(room.kookBindings),
+          ]);
+        }
       }
     }
     // drop pending records that can no longer be delivered or acknowledged

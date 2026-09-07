@@ -99,8 +99,13 @@
               ]"
             />
           </td>
-          <td>
-            {{ vote.votedPlayers.join(", ") }}
+          <td class="voters">
+            <span
+              v-for="(voter, i) in vote.votedPlayers"
+              :key="i"
+              class="voter"
+              >{{ voter }}</span
+            >
           </td>
         </tr>
       </tbody>
@@ -226,5 +231,19 @@ tbody {
   td:nth-child(7) {
     text-align: center;
   }
+}
+
+.voters {
+  max-width: 40vw;
+}
+
+.voter {
+  display: inline-block;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 4px;
+  padding: 0 6px;
+  margin: 2px 3px;
+  line-height: 1.6;
+  white-space: nowrap;
 }
 </style>

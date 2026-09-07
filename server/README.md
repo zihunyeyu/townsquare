@@ -57,6 +57,9 @@ VUE_APP_AVATAR_URL=http://localhost:8083/avatars/
 - `APP_VERSION`（默认 3.3.1）：`/dynamic/init` 报告的版本号
 - `FLOATING_NOTICE`：全局浮动公告文本
 - `AVATAR_DIR`：头像存储目录（默认 `server/avatars/`）
+- `KOOK_BOT_TOKEN`：KOOK 机器人 token（语音频道集成，可选）。也可写入
+  `server/kook-token.txt`（已 gitignore）——Git Bash/MSYS 会把含 `/` 的
+  环境变量值改写成 Windows 路径，本地开发建议用文件方式。
 
 ## 生产部署要点
 

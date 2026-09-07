@@ -5,6 +5,22 @@
  */
 // Central configuration, all overridable via environment variables.
 const path = require("path");
+const fs = require("fs");
+
+// The KOOK bot token may also be supplied via the gitignored file
+// server/kook-token.txt - this avoids shell quoting issues (Git Bash/MSYS
+// mangles tokens containing "/..." into Windows paths when passed as an
+// environment variable).
+let kookToken = process.env.KOOK_BOT_TOKEN || "";
+if (!kookToken) {
+  try {
+    kookToken = fs
+      .readFileSync(path.join(__dirname, "..", "kook-token.txt"), "utf8")
+      .trim();
+  } catch (err) {
+    /* no token file: KOOK integration stays disabled */
+  }
+}
 
 module.exports = {
   // Game WebSocket server (LiveSession in the frontend)
@@ -23,6 +39,14 @@ module.exports = {
 
   // Max WebSocket message size (bytes). Grimoire/edition payloads can be large.
   WS_MAX_PAYLOAD: Number(process.env.WS_MAX_PAYLOAD) || 8 * 1024 * 1024,
+
+  // Max lobby WebSocket message size (bytes); lobby messages are tiny.
+  LOBBY_MAX_PAYLOAD: Number(process.env.LOBBY_MAX_PAYLOAD) || 16 * 1024,
+
+  // KOOK integration (optional). Disabled when no bot token is configured.
+  // The token must stay server-side only - never expose it to the frontend.
+  KOOK_BOT_TOKEN: kookToken,
+  KOOK_API_BASE: process.env.KOOK_API_BASE || "https://www.kookapp.cn/api/v3",
 
   // Avatar storage
   AVATAR_DIR: process.env.AVATAR_DIR || path.join(__dirname, "..", "avatars"),

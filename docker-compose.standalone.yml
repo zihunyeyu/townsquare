@@ -11,8 +11,9 @@ services:
       dockerfile: Dockerfile.standalone
     restart: unless-stopped
     environment:
-      # 你的域名或服务器 IP（不带协议；非标准端口可带上，如 example.com:8080）
-      DOMAIN: localhost
+      # 你的域名或服务器 IP（不带协议；非标准端口必须带上，如 example.com:8080）
+      # 注意：要与下方 ports 映射的外部端口一致，否则前端 WebSocket 会连到 80 端口
+      DOMAIN: "192.168.31.108:${HTTP_PORT:-8080}"
       # http 或 https；https 时前端自动改用 wss（需外层 TLS 代理）
       SCHEME: http
       # 与前端 package.json 版本保持一致，避免客户端弹更新提示
