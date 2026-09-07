@@ -1,8 +1,10 @@
 # ---- frontend build ----
 FROM node:20-alpine AS build
+# 国内网络构建时可传 --build-arg NPM_REGISTRY=https://registry.npmmirror.com
+ARG NPM_REGISTRY=https://registry.npmjs.org
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci --no-audit --no-fund
+RUN npm config set registry "$NPM_REGISTRY" && npm ci --no-audit --no-fund
 COPY . .
 # build directly with vue-cli-service to skip the (missing) postbuild script
 RUN npx vue-cli-service build

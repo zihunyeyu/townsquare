@@ -1,5 +1,4 @@
 @echo off
-chcp 65001 >nul
 setlocal
 cd /d "%~dp0"
 title townsquare 本地开发启动器
@@ -25,10 +24,10 @@ REM ---- 2. 生成 .env.local(仅在缺失时) ----
 if not exist ".env.local" (
   echo [2/3] 生成 .env.local(前端指向本地后端)...
   (
-    echo VUE_APP_WS_URL=ws://localhost:8081/
-    echo VUE_APP_LOBBY_URL=ws://localhost:8082/
-    echo VUE_APP_API_URL=http://localhost:8083
-    echo VUE_APP_AVATAR_URL=http://localhost:8083/avatars/
+    echo VUE_APP_WS_URL=ws://$HOST:8081/
+    echo VUE_APP_LOBBY_URL=ws://$HOST:8082/
+    echo VUE_APP_API_URL=http://$HOST:8083
+    echo VUE_APP_AVATAR_URL=http://$HOST:8083/avatars/
   )> .env.local
 )
 

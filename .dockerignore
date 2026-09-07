@@ -5,3 +5,6 @@ server/avatars
 server/test/.tmp-avatars
 .git
 *.log
+
+/server/kook-token.txt
+aliyun-acr.txt

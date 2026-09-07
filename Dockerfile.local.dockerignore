@@ -1,0 +1,10 @@
+# Dockerfile.local 的构建上下文规则(优先于根 .dockerignore):
+# 排除无关目录,但保留 dist/ 与 server/node_modules(本机预构建产物)
+.git
+node_modules
+server/avatars
+server/test/.tmp-avatars
+*.log
+aliyun-acr.txt
+server/kook-token.txt
+.env.local

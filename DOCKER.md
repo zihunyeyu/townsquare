@@ -8,29 +8,25 @@
 ## 一体化单镜像（推荐）
 
 ```bash
-# 编辑 docker-compose.standalone.yml 中的 DOMAIN / SCHEME 后：
-docker compose -f docker-compose.standalone.yml up -d --build
+# 直接使用阿里云镜像仓库的成品镜像（编辑 DOMAIN / SCHEME 后）：
+docker compose -f docker-compose.standalone.yml pull
+docker compose -f docker-compose.standalone.yml up -d
 ```
 
-默认暴露宿主机 **8080 端口**（`HTTP_PORT=80 docker compose -f ... up -d` 可改）。
+默认暴露宿主机 **8911 端口**（`HTTP_PORT=8080 docker compose -f ... up -d` 可改）。
 容器内一个 Node 进程同时提供：前端静态页面（含 SPA 兜底）、游戏 WS
 （`/ws/`）、大厅 WS（`/lobby/`）、HTTP API（`/avatars/`、`/dynamic/init`、
 `/upload/avatar`）。头像持久化在 `avatars` 数据卷。
 
 ### 修改代码后重新发布
 
-前后端任何改动后，重新执行同一条命令即可：
+在开发机上用 `deploy-aliyun.bat` 构建并推送新镜像（标签默认取
+`package.json` 版本号），然后到服务器上重新拉取并重启：
 
 ```bash
-docker compose -f docker-compose.standalone.yml up -d --build
+TAG=<新版本> docker compose -f docker-compose.standalone.yml pull
+TAG=<新版本> docker compose -f docker-compose.standalone.yml up -d
 ```
-
-Docker 层缓存会自动跳过未变化的部分（`npm ci` 等），只重建受影响的层；
-改动越靠后（源码层），重建越快。
-
-说明：compose 服务同时声明了 `image: townsquare-app` 和 `build:`，
-因此**不带 `--build` 的 `up -d` 在本地已有镜像时直接运行、不联网校验**；
-镜像不存在时才自动构建。离线环境反复启停用 `up -d` 即可。
 
 ## 多容器部署
 
@@ -41,7 +37,7 @@ Docker 层缓存会自动跳过未变化的部分（`npm ci` 等），只重建�
 docker compose up -d --build
 ```
 
-默认暴露宿主机 **80 端口**（改 `HTTP_PORT` 环境变量可换端口，如
+默认暴露宿主机 **8911 端口**（改 `HTTP_PORT` 环境变量可换端口，如
 `HTTP_PORT=8080 docker compose up -d`）。
 
 访问 `http://<DOMAIN>/` 即可。说书人创建房间、玩家加入、投票、私聊、
@@ -66,9 +62,10 @@ docker compose up -d --build
 
 | 变量 | 默认 | 说明 |
 |---|---|---|
-| `DOMAIN` | `localhost` | 对外域名/IP，非标准端口时可带端口（如 `example.com:8080`） |
+| `DOMAIN` | `localhost:8911` | 对外域名/IP，非标准端口时可带端口（如 `example.com:8911`） |
 | `SCHEME` | `http` | `https` 时前端自动使用 `wss://` |
 | `WS_URL` / `LOBBY_URL` / `API_URL` / `AVATAR_URL` | 按 DOMAIN/SCHEME 推导 | 需要自定义路径时单独覆盖 |
+| `KOOK_BOT_TOKEN` | 空 | 可选，KOOK 语音频道集成的机器人 token（仅存于服务端） |
 
 后端容器（`backend`）：见 `server/src/config.js`
 （`APP_VERSION`、`HOST_GRACE_MS`、`WS_MAX_PAYLOAD` 等）。

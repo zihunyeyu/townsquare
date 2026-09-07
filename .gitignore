@@ -7,3 +7,5 @@ dist
 /server/avatars
 server/test/.tmp-avatars
 /server/kook-token.txt
+aliyun-acr.txt
+*.docker.tar.gz

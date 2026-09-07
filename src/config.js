@@ -11,22 +11,36 @@
  */
 const runtime = (typeof window !== "undefined" && window.__ENV) || {};
 
-const API_URL =
+// The "$HOST" placeholder in an endpoint resolves to the hostname serving
+// this page, so a dev build opened via LAN (e.g. http://192.168.x.x:8080)
+// still reaches the backend on the same machine.
+const resolveHost = url =>
+  typeof url === "string" &&
+  url.includes("$HOST") &&
+  typeof window !== "undefined"
+    ? url.split("$HOST").join(window.location.hostname)
+    : url;
+
+const API_URL = resolveHost(
   runtime.API_URL ||
   process.env.VUE_APP_API_URL ||
-  "https://api.botcgrimoire.top";
+  "https://api.botcgrimoire.top"
+);
 
-export const WS_URL =
+export const WS_URL = resolveHost(
   runtime.WS_URL ||
   process.env.VUE_APP_WS_URL ||
-  "wss://ws.botcgrimoire.top:443/ws/";
-export const LOBBY_URL =
+  "wss://ws.botcgrimoire.top:443/ws/"
+);
+export const LOBBY_URL = resolveHost(
   runtime.LOBBY_URL ||
   process.env.VUE_APP_LOBBY_URL ||
-  "wss://ws.botcgrimoire.top:443/lobby/";
+  "wss://ws.botcgrimoire.top:443/lobby/"
+);
 export const API_INIT_URL = `${API_URL}/dynamic/init`;
 export const AVATAR_UPLOAD_URL = `${API_URL}/upload/avatar`;
-export const AVATAR_BASE_URL =
+export const AVATAR_BASE_URL = resolveHost(
   runtime.AVATAR_URL ||
   process.env.VUE_APP_AVATAR_URL ||
-  "https://botcgrimoire.top/avatars/";
+  "https://botcgrimoire.top/avatars/"
+);

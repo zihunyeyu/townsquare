@@ -382,6 +382,9 @@ class LiveSession {
       case "avatar":
         this._updateAvatar(params);
         break;
+      case "rename":
+        this._updateRename(params);
+        break;
       case "leaveSeat":
         this._updateLeaveSeat();
         break;
@@ -542,6 +545,8 @@ class LiveSession {
         break;
       case "kookBoundUser":
         this._store.commit("kook/setSelfKook", params);
+        // binding a KOOK account forces the web nickname to the KOOK nickname
+        this._enforceKookName(params);
         break;
       case "kookError":
         this._store.commit("kook/setError", params);
@@ -1516,6 +1521,25 @@ class LiveSession {
     this._store.commit("players/update", { player, property: "image", value: image });
   }
 
+  /**
+   * Update the name of a seated player (host only). The broadcast to the
+   * session happens through the players/update subscription (sendPlayer).
+   * @param playerId
+   * @param name
+   * @private
+   */
+  _updateRename([playerId, name]) {
+    if (this._isSpectator) return;
+    if (typeof name !== "string" || !name.trim() || name.length > 30) return;
+    const player = this._store.state.players.players.find(p => p.id === playerId);
+    if (!player) return;
+    this._store.commit("players/update", {
+      player,
+      property: "name",
+      value: name.trim()
+    });
+  }
+
 
   /**
    * Create a chat history for a playerID.
@@ -2006,6 +2030,26 @@ class LiveSession {
   /** Remove my own KOOK binding from the room. */
   kookUnbindSelf() {
     this._request("kookUnbindUser", this._store.state.session.playerId, null);
+  }
+
+  /**
+   * After a KOOK account is bound, force the web nickname to the KOOK
+   * nickname. If already seated, propagate the rename through the host
+   * (mirrors how sendAvatar propagates avatar changes).
+   */
+  _enforceKookName(payload) {
+    if (!payload || !payload.id) return;
+    const name = String(payload.nickname || payload.username || "").trim();
+    if (!name || this._store.state.session.playerName === name) return;
+    this._store.commit("session/setPlayerName", name);
+    if (!this._isSpectator) return;
+    const player = this._store.state.players.players.find(
+      p => p.id === this._store.state.session.playerId
+    );
+    if (!player) return; // not seated: the next claim carries the new name
+    // update own seat right away; the host rebroadcast confirms it
+    this._store.commit("players/update", { player, property: "name", value: name });
+    this._sendDirect("host", "rename", [this._store.state.session.playerId, name]);
   }
 
   /**

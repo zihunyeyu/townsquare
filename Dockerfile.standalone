@@ -1,20 +1,23 @@
 # ---- 阶段 1：构建前端 ----
 FROM node:20-alpine AS build
+# 国内网络构建时可传 --build-arg NPM_REGISTRY=https://registry.npmmirror.com
+ARG NPM_REGISTRY=https://registry.npmjs.org
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci --no-audit --no-fund
+RUN npm config set registry "$NPM_REGISTRY" && npm ci --no-audit --no-fund
 COPY . .
 # 直接用 vue-cli-service 构建，跳过仓库里缺失的 postbuild 脚本
 RUN npx vue-cli-service build
 
 # ---- 阶段 2：一体化运行时（前端静态文件 + 后端 WS/API，单端口） ----
 FROM node:20-alpine
+ARG NPM_REGISTRY=https://registry.npmjs.org
 ENV NODE_ENV=production
 WORKDIR /app
 
 # 后端依赖（只装 ws，层缓存友好：package.json 不变则跳过）
 COPY server/package*.json server/
-RUN cd server && npm ci --omit=dev --no-audit --no-fund
+RUN cd server && npm config set registry "$NPM_REGISTRY" && npm ci --omit=dev --no-audit --no-fund
 
 # 后端代码 + 前端产物
 COPY server/src server/src
@@ -26,6 +29,7 @@ ENV PORT=8080 \
     SCHEME=http
 
 EXPOSE 8080
-VOLUME ["/app/server/avatars"]
+# 不声明 VOLUME:新版 BuildKit 会为其生成 oci.empty 层,阿里云个人版 ACR 拒收;
+# 运行时仍可用 -v 挂载(compose 已显式挂载 avatars)
 
 CMD ["node", "server/src/standalone.js"]

@@ -1,0 +1,29 @@
+# 本机预构建版（无需容器内联网）:
+# 适用于容器内无法访问外网的机器(例如 Docker Desktop 透明代理把容器内
+# HTTPS 全部重置的环境)。
+#
+# 使用前提(在宿主机上完成):
+#   1. npx vue-cli-service build        # 生成 dist/
+#   2. cd server && npm ci              # 安装后端依赖(只有 ws,纯 JS 无原生模块)
+#
+# 之后:docker build -f Dockerfile.local -t <image> .
+FROM node:20-alpine
+ENV NODE_ENV=production
+WORKDIR /app
+
+COPY server/package.json server/package.json
+COPY server/node_modules server/node_modules
+COPY server/src server/src
+COPY dist server/dist
+
+ENV PORT=8080 \
+    DIST_DIR=/app/server/dist \
+    DOMAIN=localhost \
+    SCHEME=http
+
+EXPOSE 8080
+# 不声明 VOLUME:新版 BuildKit 会为其生成 oci.empty 层,阿里云个人版 ACR 拒收;
+# 运行时仍可用 -v 挂载头像目录
+# (头像持久化:docker run -v townsquare-avatars:/app/server/avatars)
+
+CMD ["node", "server/src/standalone.js"]

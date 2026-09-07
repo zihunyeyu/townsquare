@@ -1,25 +1,26 @@
 # 一体化单镜像部署：前端 + 后端 + 静态托管，单容器单端口。
-# 每次修改前后端代码后重新构建即可：
-#   docker compose -f docker-compose.standalone.yml up -d --build
+# 默认直接使用阿里云镜像仓库的成品镜像（不本地构建）：
+#   docker compose -f docker-compose.standalone.yml pull
+#   docker compose -f docker-compose.standalone.yml up -d
+# 镜像的构建与推送用 deploy-aliyun.bat;升级版本后重新 pull 即可。
 services:
   app:
-    # 本地已有 townsquare-app 镜像时直接运行，不触发构建；
-    # 镜像不存在时（或加 --build）才会构建并打上这个名字
-    image: townsquare-app
-    build:
-      context: .
-      dockerfile: Dockerfile.standalone
+    image: crpi-cp6ypbcubm5ma9ru.cn-hangzhou.personal.cr.aliyuncs.com/purplesoul/townsquare:${TAG:-3.3.1}
+    pull_policy: missing
     restart: unless-stopped
     environment:
-      # 你的域名或服务器 IP（不带协议；非标准端口必须带上，如 example.com:8080）
-      # 注意：要与下方 ports 映射的外部端口一致，否则前端 WebSocket 会连到 80 端口
-      DOMAIN: "192.168.31.108:${HTTP_PORT:-8080}"
-      # http 或 https；https 时前端自动改用 wss（需外层 TLS 代理）
-      SCHEME: http
-      # 与前端 package.json 版本保持一致，避免客户端弹更新提示
+      # 对外域名或服务器 IP(不带协议;非标准端口必须带上),也可用环境变量覆盖:
+      #   DOMAIN=example.com:8911 docker compose -f docker-compose.standalone.yml up -d
+      # 注意:要与下方 ports 映射的外部端口一致,否则前端 WebSocket 会连错端口
+      DOMAIN: "${DOMAIN:-localhost:8911}"
+      # http 或 https;https 时前端自动改用 wss(需外层 TLS 代理)
+      SCHEME: ${SCHEME:-http}
+      # 与前端 package.json 版本保持一致,避免客户端弹更新提示
       APP_VERSION: 3.3.1
+      # 可选:KOOK 机器人 token(语音频道集成,不用可留空)
+      KOOK_BOT_TOKEN: ${KOOK_BOT_TOKEN:-}
     ports:
-      - "${HTTP_PORT:-8080}:8080"
+      - "${HTTP_PORT:-8911}:8080"
     volumes:
       - avatars:/app/server/avatars
 
