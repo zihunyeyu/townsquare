@@ -1,28 +1,37 @@
 <template>
-  <Modal v-if="modals.input" @close="close" :name="'input'" :type="session.inputModal">
+  <Modal
+    v-if="modals.input"
+    @close="close"
+    :name="'input'"
+    :type="session.inputModal"
+  >
     <span v-if="!!warningMessage" class="warning">{{ warningMessage }}</span>
     <div v-if="session.inputModal === 'input'">
       <form class="input-box" @submit.prevent="confirmInput">
         <div v-for="n in session.inputData.length" :key="n">
-          <label>{{ session.inputData.name[n-1] }}</label>
+          <label>{{ session.inputData.name[n - 1] }}</label>
           <input
             type="text"
-            :id="'input-'+n"
-            :ref="'input-'+n"
+            :id="'input-' + n"
+            :ref="'input-' + n"
             autocomplete="off"
             @focus="typing"
             @blur="notTyping"
-            v-model="input[n-1]"
-            >
+            v-model="input[n - 1]"
+          />
         </div>
         <div class="input-actions">
           <button type="submit" class="confirm">确认</button>
           <button type="button" @click="close">取消</button>
-      </div>
+        </div>
       </form>
     </div>
     <div v-else-if="session.inputModal === 'confirm'">
-      <form class="input-box confirm-box" @submit.prevent="confirmYes" tabindex="-1">
+      <form
+        class="input-box confirm-box"
+        @submit.prevent="confirmYes"
+        tabindex="-1"
+      >
         <label>{{ session.inputData.name[0] }}</label>
         <div class="input-actions">
           <button type="submit" class="confirm" ref="confirmYes">确认</button>
@@ -51,51 +60,55 @@ export default {
     ...mapState(["modals", "grimoire", "session", "lobby"]),
     ...mapState("players", ["players"]),
   },
-  data(){
+  data() {
     return {
       input: [""],
       confirm: false,
       warningMessage: "",
       windowWidth: window.innerWidth,
-      windowHeight: window.innerHeight
-    }
+      windowHeight: window.innerHeight,
+    };
   },
-  created(){
-    if (this.session && this.session.inputData && this.session.inputData.placeholder) {
+  created() {
+    if (
+      this.session &&
+      this.session.inputData &&
+      this.session.inputData.placeholder
+    ) {
       this.input = [...this.session.inputData.placeholder];
     }
   },
   watch: {
-    'session.inputData.placeholder': {
+    "session.inputData.placeholder": {
       handler(placeholder) {
         if (Array.isArray(placeholder) && placeholder.length > 0) {
           this.input = [...placeholder];
         }
       },
-      immediate: true
+      immediate: true,
     },
-    'modals.input': function(isOpen) {
+    "modals.input": function (isOpen) {
       if (isOpen) {
         if (this.session.inputModal === "input") {
           this.$nextTick(() => {
             this.$refs["input-1"][0].select();
-          })
+          });
         } else if (this.session.inputModal === "confirm") {
           this.$nextTick(() => {
             this.$refs.confirmYes.focus();
-          })
+          });
         } else if (this.session.inputModal === "text") {
           this.$nextTick(() => {
             this.$refs.confirmClose.focus();
-          })
+          });
         }
       }
-    }
+    },
   },
-  mounted(){
+  mounted() {
     window.addEventListener("resize", this.handleResize);
   },
-  beforeDestroy(){
+  beforeDestroy() {
     window.removeEventListener("resize", this.handleResize);
   },
   methods: {
@@ -103,31 +116,45 @@ export default {
       this.$store.commit("session/setTyping", true);
     },
     notTyping() {
-      this.$store.commit("session/setTyping", false)
+      this.$store.commit("session/setTyping", false);
     },
     confirmInput() {
       const allowEmpty = ["bootlegger"];
-      if (this.session.inputModal === "input" && !allowEmpty.includes(this.session.inputType) && (this.input.length <= 0 || this.input.some(item => item === ""))) {
+      if (
+        this.session.inputModal === "input" &&
+        !allowEmpty.includes(this.session.inputType) &&
+        (this.input.length <= 0 || this.input.some((item) => item === ""))
+      ) {
         this.close();
         return;
       }
       switch (this.session.inputType) {
         case "background":
           break;
-        case "changeName": {
-            if (this.input[0].trim() === "" || this.input[0].trim() === "空座位" || this.input[0].trim() === "说书人") {
-            this.warningMessage = "昵称非法！";
-            this.$nextTick(() => {
-              this.$refs["input-1"][0].select();
-            })
-            return;
+        case "changeName":
+          {
+            if (
+              this.input[0].trim() === "" ||
+              this.input[0].trim() === "空座位" ||
+              this.input[0].trim() === "说书人"
+            ) {
+              this.warningMessage = "昵称非法！";
+              this.$nextTick(() => {
+                this.$refs["input-1"][0].select();
+              });
+              return;
             }
           }
           break;
-        case "hostSession": {
+        case "hostSession":
+          {
             const sessionId = this.input[0];
             const numPlayers = this.input[1];
-            if (!Number(sessionId) || Number(sessionId) < 0 || Number(sessionId) >= 10000) {
+            if (
+              !Number(sessionId) ||
+              Number(sessionId) < 0 ||
+              Number(sessionId) >= 10000
+            ) {
               this.warningMessage = "请输入大于0小于10000的数字！";
               return;
             }
@@ -141,7 +168,8 @@ export default {
             }
           }
           break;
-        case "joinSession": {
+        case "joinSession":
+          {
             let sessionId = this.input[0];
             if (sessionId.match(/^https?:\/\//i)) {
               sessionId = sessionId.split("#").pop();
@@ -152,9 +180,14 @@ export default {
             }
           }
           break;
-        case "seatNum": {
+        case "seatNum":
+          {
             let seatNum = Number(this.input[0]);
-            if (!seatNum || Math.floor(seatNum) != seatNum || seatNum > this.players.length) {
+            if (
+              !seatNum ||
+              Math.floor(seatNum) != seatNum ||
+              seatNum > this.players.length
+            ) {
               this.warningMessage = "无效的座位号！";
               return;
             }
@@ -167,11 +200,15 @@ export default {
         case "pronouns":
           break;
         case "changeNameSt":
-          if (this.input[0].trim() === "" || this.input[0].trim() === "空座位" || this.input[0].trim() === "说书人") {
+          if (
+            this.input[0].trim() === "" ||
+            this.input[0].trim() === "空座位" ||
+            this.input[0].trim() === "说书人"
+          ) {
             this.warningMessage = "昵称非法！";
             this.$nextTick(() => {
               this.$refs["input-1"][0].select();
-            })
+            });
             return;
           }
           break;
@@ -182,10 +219,10 @@ export default {
       }
 
       if (this.session.inputResolver) {
-          this.session.inputResolver(this.input);
+        this.session.inputResolver(this.input);
       }
 
-      this.close()
+      this.close();
     },
     confirmYes() {
       this.session.inputResolver(true);
@@ -193,7 +230,7 @@ export default {
     },
     close() {
       if (this.session.inputResolver && this.session.inputModal === "text") {
-          this.session.inputResolver(true);
+        this.session.inputResolver(true);
       } else if (this.session.inputRejecter) {
         this.session.inputRejecter(null);
       }
@@ -202,18 +239,18 @@ export default {
       this.input = [""];
       this.warningMessage = "";
 
-      this.toggleModal('input');
+      this.toggleModal("input");
 
       this.$nextTick(() => {
-        document.getElementById('app').focus();
-      })
+        document.getElementById("app").focus();
+      });
     },
-    handleResize(){
+    handleResize() {
       this.windowWidth = window.innerWidth;
       this.windowHeight = window.innerHeight;
     },
-    ...mapMutations(["toggleModal"])
-  }
+    ...mapMutations(["toggleModal"]),
+  },
 };
 </script>
 
@@ -227,7 +264,7 @@ export default {
   width: 100%;
 }
 
-.input-actions {  
+.input-actions {
   width: 100%;
   display: flex;
   justify-content: flex-end;
@@ -249,17 +286,17 @@ export default {
 }
 
 .input-box button {
-  padding: 8px 15px; 
+  padding: 8px 15px;
   border: none;
-  border-radius: 20px; 
+  border-radius: 20px;
   cursor: pointer;
   font-weight: bold;
 }
 
 .input-box button.confirm {
- background-color: #0a65dd;
- color: white;
- transition: background-color 0.3s;
+  background-color: #0a65dd;
+  color: white;
+  transition: background-color 0.3s;
 }
 
 .input-box button.confirm:focus {

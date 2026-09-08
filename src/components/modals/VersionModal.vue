@@ -3,29 +3,29 @@
     <h3>更新日志</h3>
     <div v-if="version != latestVersion">
       <span class="warning">
-        当前版本并非最新版本（{{ latestVersion }}），请尝试清空缓存获取最新版本！
+        当前版本并非最新版本（{{
+          latestVersion
+        }}），请尝试清空缓存获取最新版本！
       </span>
     </div>
     <div>
       <h4>作者的话</h4>
       <div>
-        <span>官方wiki已将试运营相克收录进相克列表，但是作者觉得很多都很烂，所以魔典不予收录。</span>
-        <br>
+        <span
+          >官方wiki已将试运营相克收录进相克列表，但是作者觉得很多都很烂，所以魔典不予收录。</span
+        >
+        <br />
         <span>如需启用这些新相克请手动添加至json。：）</span>
-        <br>
+        <br />
       </div>
-      <br>
+      <br />
     </div>
-    <div
-      v-for="version in changelog"
-      :key="version.id"
-      class="versions"
-    >
+    <div v-for="version in changelog" :key="version.id" class="versions">
       <h4>{{ version.name }}</h4>
       <ul>
         <li v-for="(item, index) in version.changelog" :key="index">
           <span>{{ item }}</span>
-          <br/>
+          <br />
         </li>
       </ul>
     </div>
@@ -35,20 +35,20 @@
 <script>
 import { mapMutations, mapState } from "vuex";
 import Modal from "./Modal";
-import versionJSON from '../../version.json';
+import versionJSON from "../../version.json";
 
 export default {
   components: { Modal },
   computed: {
     ...mapState(["modals", "grimoire", "session"]),
-    ...mapState(["version", "latestVersion", "lastVersion"])
+    ...mapState(["version", "latestVersion", "lastVersion"]),
   },
-  data(){
+  data() {
     return {
       changelog: versionJSON,
       windowWidth: window.innerWidth,
-      windowHeight: window.innerHeight
-    }
+      windowHeight: window.innerHeight,
+    };
   },
   // watch: {
   //   'modals.version'(isOpen) {
@@ -57,56 +57,56 @@ export default {
   //     }
   //   }
   // },
-  mounted(){
+  mounted() {
     window.addEventListener("resize", this.handleResize);
   },
-  beforeDestroy(){
+  beforeDestroy() {
     window.removeEventListener("resize", this.handleResize);
   },
   methods: {
     close() {
-      if (this.version != this.lastVersion) this.$store.commit("setLastVersion", this.version); 
+      if (this.version != this.lastVersion)
+        this.$store.commit("setLastVersion", this.version);
       this.$store.commit("toggleModal", "version");
     },
-    handleResize(){
+    handleResize() {
       this.windowWidth = window.innerWidth;
       this.windowHeight = window.innerHeight;
     },
-    ...mapMutations(["toggleModal"])
-  }
+    ...mapMutations(["toggleModal"]),
+  },
 };
 </script>
 
 <style scoped lang="scss">
-
 .versions {
-  text-align: left; 
+  text-align: left;
 
   h4 {
-    text-align: left; 
+    text-align: left;
     margin-bottom: 10px;
     padding-left: 5px;
   }
 
   ul {
     list-style-type: disc;
-    list-style-position: outside; 
-    
-    display: block;  
+    list-style-position: outside;
+
+    display: block;
     flex-wrap: initial;
-    
-    padding-left: 25px; 
+
+    padding-left: 25px;
     margin-top: 5px;
-    margin-bottom: 0; 
+    margin-bottom: 0;
   }
-  
+
   li {
-    text-align: left; 
+    text-align: left;
     line-height: 1.5;
-    
+
     display: list-item;
-    
-    margin-bottom: 5px; 
+
+    margin-bottom: 5px;
   }
 }
 

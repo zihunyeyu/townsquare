@@ -56,7 +56,7 @@ module.exports = {
 
   // Reported by GET /dynamic/init. Defaults match this repo's frontend so
   // clients do not see an update prompt.
-  APP_VERSION: process.env.APP_VERSION || "3.3.1",
+  APP_VERSION: process.env.APP_VERSION || "3.3.2",
   FLOATING_NOTICE: process.env.FLOATING_NOTICE || "",
 
   // Reserved playerIds that may not be used by clients

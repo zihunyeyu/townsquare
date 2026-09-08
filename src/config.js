@@ -14,33 +14,40 @@ const runtime = (typeof window !== "undefined" && window.__ENV) || {};
 // The "$HOST" placeholder in an endpoint resolves to the hostname serving
 // this page, so a dev build opened via LAN (e.g. http://192.168.x.x:8080)
 // still reaches the backend on the same machine.
-const resolveHost = url =>
-  typeof url === "string" &&
-  url.includes("$HOST") &&
-  typeof window !== "undefined"
+// "$ORIGIN" resolves to host:port of this page, so a container deployment
+// reached via LAN/public IP:port finds its own backend without DOMAIN set.
+const resolveHost = (url) => {
+  if (typeof url !== "string" || typeof window === "undefined") {
+    return url;
+  }
+  if (url.includes("$ORIGIN")) {
+    return url.split("$ORIGIN").join(window.location.host);
+  }
+  return url.includes("$HOST")
     ? url.split("$HOST").join(window.location.hostname)
     : url;
+};
 
 const API_URL = resolveHost(
   runtime.API_URL ||
-  process.env.VUE_APP_API_URL ||
-  "https://api.botcgrimoire.top"
+    process.env.VUE_APP_API_URL ||
+    "https://api.botcgrimoire.top",
 );
 
 export const WS_URL = resolveHost(
   runtime.WS_URL ||
-  process.env.VUE_APP_WS_URL ||
-  "wss://ws.botcgrimoire.top:443/ws/"
+    process.env.VUE_APP_WS_URL ||
+    "wss://ws.botcgrimoire.top:443/ws/",
 );
 export const LOBBY_URL = resolveHost(
   runtime.LOBBY_URL ||
-  process.env.VUE_APP_LOBBY_URL ||
-  "wss://ws.botcgrimoire.top:443/lobby/"
+    process.env.VUE_APP_LOBBY_URL ||
+    "wss://ws.botcgrimoire.top:443/lobby/",
 );
 export const API_INIT_URL = `${API_URL}/dynamic/init`;
 export const AVATAR_UPLOAD_URL = `${API_URL}/upload/avatar`;
 export const AVATAR_BASE_URL = resolveHost(
   runtime.AVATAR_URL ||
-  process.env.VUE_APP_AVATAR_URL ||
-  "https://botcgrimoire.top/avatars/"
+    process.env.VUE_APP_AVATAR_URL ||
+    "https://botcgrimoire.top/avatars/",
 );

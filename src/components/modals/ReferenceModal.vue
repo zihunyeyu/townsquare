@@ -45,10 +45,12 @@
               backgroundImage: `url(${
                 role.image && grimoire.isImageOptIn
                   ? role.image
-                  : require('../../assets/icons/' +
-                      (role.imageAlt || role.id.replace(/old1$/, '')) +
-                      '.png')
-              })`
+                  : require(
+                      '../../assets/icons/' +
+                        (role.imageAlt || role.id.replace(/old1$/, '')) +
+                        '.png',
+                    )
+              })`,
             }"
           ></span>
           <div class="role">
@@ -74,33 +76,37 @@
             v-if="jinx.first"
             class="icon"
             :style="{
-              backgroundImage: `url(${require('../../assets/icons/' +
-                (jinx.first.imageAlt || jinx.first.id.replace(/old1$/, '')) +
-                '.png')})`
+              backgroundImage: `url(${require(
+                '../../assets/icons/' +
+                  (jinx.first.imageAlt || jinx.first.id.replace(/old1$/, '')) +
+                  '.png',
+              )})`,
             }"
           ></span>
           <span
             v-else
             class="icon"
             :style="{
-              backgroundImage: `url(${require('../../assets/icons/custom.png')})`
+              backgroundImage: `url(${require('../../assets/icons/custom.png')})`,
             }"
           ></span>
-          <span v-if="jinx.first"
+          <span
+            v-if="jinx.first"
             class="icon"
             :style="{
-              backgroundImage: `url(${require('../../assets/icons/' +
-                (jinx.second.imageAlt || jinx.second.id.replace(/old1$/, '')) +
-                '.png')})`
+              backgroundImage: `url(${require(
+                '../../assets/icons/' +
+                  (jinx.second.imageAlt ||
+                    jinx.second.id.replace(/old1$/, '')) +
+                  '.png',
+              )})`,
             }"
           ></span>
           <div class="role">
             <span v-if="jinx.first" class="name"
               >{{ jinx.first.name }} & {{ jinx.second.name }}</span
             >
-            <span v-else class="name"
-              >{{ jinx.name }}</span
-            >
+            <span v-else class="name">{{ jinx.name }}</span>
             <span v-if="jinx.first" class="ability">{{ jinx.reason }}</span>
             <span v-else class="ability">{{ jinx.ability }}</span>
           </div>
@@ -118,17 +124,17 @@ import { mapMutations, mapState } from "vuex";
 
 export default {
   components: {
-    Modal
+    Modal,
   },
   computed: {
     /**
      * Return a list of jinxes in the form of role IDs and a reason
      * @returns {*[]} [{first, second, reason}]
      */
-    jinxed: function() {
+    jinxed: function () {
       const jinxed = [];
       const jinxNames = ["jinxes", "jinxed", "jinx", "hatred", "hate"];
-      this.roles.forEach(role => {
+      this.roles.forEach((role) => {
         if (jinxNames.includes(role.team)) {
           jinxed.push(role);
         }
@@ -138,19 +144,27 @@ export default {
               jinxed.push({
                 first: role,
                 second: this.roles.get(second),
-                reason
+                reason,
               });
             }
           });
         }
-        const jinxName = Object.keys(role).find(key => jinxNames.includes(key));
+        const jinxName = Object.keys(role).find((key) =>
+          jinxNames.includes(key),
+        );
         if (jinxName) {
           role[jinxName].forEach((item) => {
-            if (this.roles.get(item.id.toLocaleLowerCase().replace(/[^a-z0-9]/g, ""))) {
+            if (
+              this.roles.get(
+                item.id.toLocaleLowerCase().replace(/[^a-z0-9]/g, ""),
+              )
+            ) {
               jinxed.push({
                 first: role,
-                second: this.roles.get(item.id.toLocaleLowerCase().replace(/[^a-z0-9]/g, "")),
-                reason: item.reason
+                second: this.roles.get(
+                  item.id.toLocaleLowerCase().replace(/[^a-z0-9]/g, ""),
+                ),
+                reason: item.reason,
               });
             }
           });
@@ -158,9 +172,9 @@ export default {
       });
       return jinxed;
     },
-    rolesGrouped: function() {
+    rolesGrouped: function () {
       const rolesGrouped = {};
-      this.roles.forEach(role => {
+      this.roles.forEach((role) => {
         if (!rolesGrouped[role.team]) {
           rolesGrouped[role.team] = [];
         }
@@ -183,7 +197,7 @@ export default {
     //   Vue.set(rolesCn, "状态", value);
     // }
     // },
-    playersByRole: function() {
+    playersByRole: function () {
       const players = {};
       this.players.forEach(({ name, role }) => {
         if (role && role.id && role.team !== "traveler") {
@@ -195,14 +209,21 @@ export default {
       });
       return players;
     },
-    ...mapState(["roles", "modals", "edition", "grimoire", "jinxes", "states", "teamsNames"]),
-    ...mapState("players", ["players"])
+    ...mapState([
+      "roles",
+      "modals",
+      "edition",
+      "grimoire",
+      "jinxes",
+      "states",
+      "teamsNames",
+    ]),
+    ...mapState("players", ["players"]),
   },
   methods: {
-    ...mapMutations(["toggleModal"])
-  }
+    ...mapMutations(["toggleModal"]),
+  },
 };
-
 </script>
 
 <style lang="scss" scoped>
@@ -268,14 +289,14 @@ h3 {
 }
 
 .state {
-  .explain{
+  .explain {
     left: 18px;
   }
   .name {
-    color: #CC04FF;
+    color: #cc04ff;
   }
   aside {
-    background: linear-gradient(-90deg, #CC04FF, transparent)
+    background: linear-gradient(-90deg, #cc04ff, transparent);
   }
 }
 

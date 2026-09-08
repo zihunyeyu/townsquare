@@ -18,10 +18,13 @@
             backgroundImage: `url(${
               reminder.image && grimoire.isImageOptIn
                 ? reminder.image
-                : require('../../assets/icons/' +
-                    (reminder.imageAlt || reminder.role.replace(/old1$/, '')) +
-                    '.png')
-            })`
+                : require(
+                    '../../assets/icons/' +
+                      (reminder.imageAlt ||
+                        reminder.role.replace(/old1$/, '')) +
+                      '.png',
+                  )
+            })`,
           }"
         ></span>
         <span class="text">{{ reminder.name }}</span>
@@ -39,12 +42,14 @@ import { mapMutations, mapState } from "vuex";
  * @param role The role for which the reminder should be generated
  * @return {function(*): {image: string|string[]|string|*, role: *, name: *, imageAlt: string|*}}
  */
-const mapReminder = ({ id, image, imageAlt }) => name => ({
-  role: id,
-  image,
-  imageAlt,
-  name
-});
+const mapReminder =
+  ({ id, image, imageAlt }) =>
+  (name) => ({
+    role: id,
+    image,
+    imageAlt,
+    name,
+  });
 
 export default {
   components: { Modal },
@@ -53,32 +58,45 @@ export default {
     availableReminders() {
       let reminders = [];
       const { players, bluffs } = this.$store.state.players;
-      this.$store.state.roles.forEach(role => {
+      this.$store.state.roles.forEach((role) => {
         // add reminders from player roles
-        if (players.some(p => p.role.id === role.id)) {
-          if (role.reminders && role.reminders.length) reminders = [...reminders, ...role.reminders.map(mapReminder(role))];
+        if (players.some((p) => p.role.id === role.id)) {
+          if (role.reminders && role.reminders.length)
+            reminders = [
+              ...reminders,
+              ...role.reminders.map(mapReminder(role)),
+            ];
         }
         // add reminders from bluff/other roles
-        else if (bluffs.some(bluff => bluff.id === role.id)) {
-          if (role.reminders && role.reminders.length) reminders = [...reminders, ...role.reminders.map(mapReminder(role))];
+        else if (bluffs.some((bluff) => bluff.id === role.id)) {
+          if (role.reminders && role.reminders.length)
+            reminders = [
+              ...reminders,
+              ...role.reminders.map(mapReminder(role)),
+            ];
         }
         // add global reminders
         if (role.remindersGlobal && role.remindersGlobal.length) {
           reminders = [
             ...reminders,
-            ...role.remindersGlobal.map(mapReminder(role))
+            ...role.remindersGlobal.map(mapReminder(role)),
           ];
         }
       });
       // add fabled reminders
-      this.$store.state.players.fabled.forEach(role => {
-        if (role.reminders && role.reminders.length) reminders = [...reminders, ...role.reminders.map(mapReminder(role))];
+      this.$store.state.players.fabled.forEach((role) => {
+        if (role.reminders && role.reminders.length)
+          reminders = [...reminders, ...role.reminders.map(mapReminder(role))];
       });
 
       // add out of script traveler reminders
-      this.$store.state.otherTravelers.forEach(role => {
-        if (players.some(p => p.role.id === role.id)) {
-          if (role.reminders && role.reminders.length) reminders = [...reminders, ...role.reminders.map(mapReminder(role))];
+      this.$store.state.otherTravelers.forEach((role) => {
+        if (players.some((p) => p.role.id === role.id)) {
+          if (role.reminders && role.reminders.length)
+            reminders = [
+              ...reminders,
+              ...role.reminders.map(mapReminder(role)),
+            ];
         }
       });
 
@@ -88,7 +106,7 @@ export default {
       return reminders;
     },
     ...mapState(["modals", "grimoire", "session"]),
-    ...mapState("players", ["players"])
+    ...mapState("players", ["players"]),
   },
   methods: {
     async showInputModal({ inputType, inputModal, inputData }) {
@@ -114,8 +132,8 @@ export default {
           inputData: {
             name: ["输入自定义提醒"],
             length: 1,
-            placeholder: [""]
-          }
+            placeholder: [""],
+          },
         }).catch(() => {
           return null;
         });
@@ -131,19 +149,21 @@ export default {
       this.$store.commit("players/update", {
         player,
         property: "reminders",
-        value
+        value,
       });
-      const stReminders = value.filter(reminder => reminder.role !== "custom");
+      const stReminders = value.filter(
+        (reminder) => reminder.role !== "custom",
+      );
       if (!this.session.isSpectator && reminder.role != "custom") {
         this.$store.commit("players/update", {
           player,
           property: "stReminders",
-          value: stReminders
+          value: stReminders,
         });
       }
     },
-    ...mapMutations(["toggleModal"])
-  }
+    ...mapMutations(["toggleModal"]),
+  },
 };
 </script>
 

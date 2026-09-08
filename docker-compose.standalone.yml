@@ -5,18 +5,20 @@
 # 镜像的构建与推送用 deploy-aliyun.bat;升级版本后重新 pull 即可。
 services:
   app:
-    image: crpi-cp6ypbcubm5ma9ru.cn-hangzhou.personal.cr.aliyuncs.com/purplesoul/townsquare:${TAG:-3.3.1}
-    pull_policy: missing
+    image: crpi-cp6ypbcubm5ma9ru.cn-hangzhou.personal.cr.aliyuncs.com/purplesoul/townsquare:${TAG:-3.3.2}
+    # always:pull 时总是向仓库检查该 tag 的最新内容,同名 tag 覆盖后也能拉到新镜像
+    pull_policy: always
     restart: unless-stopped
     environment:
       # 对外域名或服务器 IP(不带协议;非标准端口必须带上),也可用环境变量覆盖:
       #   DOMAIN=example.com:8911 docker compose -f docker-compose.standalone.yml up -d
-      # 注意:要与下方 ports 映射的外部端口一致,否则前端 WebSocket 会连错端口
-      DOMAIN: "${DOMAIN:-localhost:8911}"
+      # 留空(默认)则自动适配:前端以访问页面所用的 host:port 连接后端,
+      # 局域网/公网 IP:端口 直接访问即可,无需配置
+      DOMAIN: "${DOMAIN:-}"
       # http 或 https;https 时前端自动改用 wss(需外层 TLS 代理)
       SCHEME: ${SCHEME:-http}
       # 与前端 package.json 版本保持一致,避免客户端弹更新提示
-      APP_VERSION: 3.3.1
+      APP_VERSION: 3.3.2
       # 可选:KOOK 机器人 token(语音频道集成,不用可留空)
       KOOK_BOT_TOKEN: ${KOOK_BOT_TOKEN:-}
     ports:

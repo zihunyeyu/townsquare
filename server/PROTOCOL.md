@@ -77,6 +77,7 @@ ws://{host}:{port}/{playerId}
 |---|---|---|
 | `checkAllowHost` | 说书人请求主持房间 | `["allowHost", bool]` |
 | `checkAllowJoin` | 玩家请求加入房间 | `["allowJoin", bool]` |
+| `dissolveRoom` | 说书人主动解散房间（仅当前 host），`params = null` | 玩家收到 `alertPopup` 后连接关闭，房间立即销毁 |
 | `deleteMessage` | 可靠投递确认，`params = [queueType, feedbackId]` | 向原发送方转发 `["feedback", feedbackId]` |
 | `kookBind` | 绑定房间到 KOOK 服务器，`params = { guildId }`（仅 host） | 广播 `kookBound` + `kookVoice` |
 | `kookUnbind` | 解除绑定（仅 host） | 广播 `["kookBound", null]` |
@@ -86,6 +87,7 @@ ws://{host}:{port}/{playerId}
 | `kookMoveAll` | 全员移到指定语音频道（仅 host），`params = { channelId }` | 广播 `kookVoice` |
 | `kookMute` | 服务器级闭麦/解除（仅 host），`params = { userIds?, mute?, type? }`（type 1=麦克风 2=耳机） | 广播 `kookVoice` |
 | `kookSetCategory` | 限定本局使用的语音频道分组（仅 host），`params = { categoryId }`，空值解除 | 广播 `kookBound` + `kookVoice`（按分组过滤） |
+| `kookSetToken` | 设置/修改服务器级 KOOK 机器人 Token（仅 host），`params = { token }`，空值停用；保存时尽量联机校验并写入 `server/kook-token.txt` 持久化 | 向本人回 `kookTokenSet`（不含 token）；失败回 `kookError` |
 | `kookSync` | 请求重发当前 KOOK 状态 | `kookBound` + `kookBindings` + `kookVoice` |
 
 `allowHost` 判定：房间无活跃 host，或 `stSecret` 与房间记录匹配（重连夺回）。
@@ -174,8 +176,10 @@ KOOK 指令的失败一律以 `["kookError", { op, message }]` 回复请求方�
 3. **host 断开**：进入宽限期（默认 90 秒，`HOST_GRACE_MS`）。宽限期内：
    - 相同 `stSecret` 的 host 连接可夺回房间（顶替失效连接）；
    - 玩家重连不受影响（前端 `isJoinAllowed === true` 时跳过重新检查）。
-4. **关闭**：宽限期结束 host 未归 → 向剩余玩家发 `alertPopup` 后以 1000 关闭
-   其连接，销毁房间；或所有成员离开后自动销毁 *(均为实现决策)*。
+4. **销毁**：只在两种情况发生——说书人通过 `dissolveRoom` 主动解散
+   （玩家收到 `alertPopup` 后连接关闭、房间立即销毁）；或房间完全无人
+   （无 host 且无玩家）——主动离开即刻回收，断线则在宽限期结束时回收。
+   宽限期超时本身**不会**销毁仍有玩家的房间，也不会踢出玩家。
 5. **玩家断开**：服务器向 host 转发 `["bye", playerId]`。
 
 ## 7. 可靠投递（feedback 机制）
@@ -198,7 +202,10 @@ KOOK 指令的失败一律以 `["kookError", { op, message }]` 回复请求方�
 ## 9. KOOK 语音集成
 
 可选功能，需配置环境变量 `KOOK_BOT_TOKEN`（未配置时所有 `kook*` 请求回
-`kookError`，其余行为不变）。**token 只存在于服务器进程内，绝不下发前端。**
+`kookError`，其余行为不变）。也可由说书人在网页端通过 `kookSetToken`
+随时设置/修改（见 §3.2），运行时生效并写入 `server/kook-token.txt`
+持久化；环境变量优先级更高（重启时若存在则覆盖文件）。
+**token 只存在于服务器进程内，绝不下发前端。**
 
 ### 9.1 模型
 
@@ -209,7 +216,7 @@ KOOK 指令的失败一律以 `["kookError", { op, message }]` 回复请求方�
 - 设置分组后，推送的 `kookVoice` 快照只包含该分组下的语音频道
   （所有分组本身始终保留，供前端切换），移动/集合指令也被约束在该分组内。
 - 语音状态（频道树、频道内成员、闭麦列表）由**服务器持有**（本后端唯一的
-  有状态模块）：REST 全量初始化 + Gateway 事件增量维护 + 每 60s 全量对账。
+  有状态模块）：REST 全量初始化 + Gateway 事件增量维护 + 每 5s 全量对账。
   实现见 `src/kook/`（`kookApi` REST 封装 / `kookGateway` 长连接 /
   `kookVoice` 状态缓存 / `kookService` 门面）。
 
@@ -221,7 +228,8 @@ KOOK 指令的失败一律以 `["kookError", { op, message }]` 回复请求方�
 | `kookBindings` | `{ playerId: kookUserId, ... }` | 绑定/解绑用户、玩家真正离开时广播 |
 | `kookVoice` | 语音状态快照 `{ guildId, name, ready, channels, users, occupancy, muted, deafened }` | 状态变化时全房间广播（全量快照，无量级问题） |
 | `kookBoundUser` | `{ id, username, nickname, avatar, identify_num }` | 本人 `kookBindUser` 成功后回执；重连时若绑定仍在会补发 |
-| `kookError` | `{ op, message }` | 任一 `kook*` 指令失败时回复请求方 |
+| `kookTokenSet` | `{ configured, verified }` | 本人 `kookSetToken` 成功回执（永不包含 token）；`verified` 表示已通过 KOOK API 联机校验 |
+| `kookError` | `{ op, message, code? }` | 任一 `kook*` 指令失败时回复请求方；`code` 目前仅 `"NO_TOKEN"`（未配置机器人 Token） |
 
 ### 9.3 约束（继承自 KOOK 平台）
 

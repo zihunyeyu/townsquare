@@ -54,7 +54,7 @@ VUE_APP_AVATAR_URL=http://localhost:8083/avatars/
 
 - `HOST_GRACE_MS`（默认 90000）：说书人断线后房间的保留时间
 - `WS_MAX_PAYLOAD`（默认 8MiB）：单条 WebSocket 消息上限
-- `APP_VERSION`（默认 3.3.1）：`/dynamic/init` 报告的版本号
+- `APP_VERSION`（默认 3.3.2）：`/dynamic/init` 报告的版本号
 - `FLOATING_NOTICE`：全局浮动公告文本
 - `AVATAR_DIR`：头像存储目录（默认 `server/avatars/`）
 - `KOOK_BOT_TOKEN`：KOOK 机器人 token（语音频道集成，可选）。也可写入

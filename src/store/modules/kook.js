@@ -22,39 +22,40 @@ const state = () => ({
   selfKookName: "",
   selfQuery: "", // persisted "用户名#识别号" for automatic re-binding
   lastCategoryId: "", // last chosen channel category (host, auto re-applied)
-  lastError: null // { op, message }
+  lastError: null, // { op, message, code? }
+  tokenSaved: null, // { configured, verified, ts } ack of kook/setToken
 });
 
 const getters = {
   /** Channel categories (for the group selector). */
   categories(state) {
     return state.channels
-      .filter(c => c.isCategory)
+      .filter((c) => c.isCategory)
       .sort((a, b) => a.level - b.level);
   },
   /** Voice channels with resolved, display-ready user lists. */
   channelList(state) {
     return state.channels
-      .filter(c => !c.isCategory)
-      .map(c => ({
+      .filter((c) => !c.isCategory)
+      .map((c) => ({
         ...c,
-        users: (state.occupancy[c.id] || []).map(uid => {
+        users: (state.occupancy[c.id] || []).map((uid) => {
           const u = state.users[uid] || { id: uid };
           return {
             ...u,
             displayName: u.nickname || u.username || uid,
             muted: state.muted.includes(uid),
             deafened: state.deafened.includes(uid),
-            isSelf: uid === state.selfKookId
+            isSelf: uid === state.selfKookId,
           };
-        })
+        }),
       }))
       .sort((a, b) => a.level - b.level);
   },
   /** Whether the bound KOOK user of this client is in any voice channel. */
   isSelfInVoice(state) {
-    return Object.keys(state.occupancy).some(cid =>
-      state.occupancy[cid].includes(state.selfKookId)
+    return Object.keys(state.occupancy).some((cid) =>
+      state.occupancy[cid].includes(state.selfKookId),
     );
   },
   selfChannelId(state) {
@@ -75,7 +76,7 @@ const getters = {
       map[playerId] = {
         kookId,
         name: u ? u.nickname || u.username || kookId : kookId,
-        channelId: null
+        channelId: null,
       };
       for (const cid of Object.keys(state.occupancy)) {
         if (state.occupancy[cid].includes(kookId)) {
@@ -85,7 +86,7 @@ const getters = {
       }
     }
     return map;
-  }
+  },
 };
 
 const mutations = {
@@ -160,6 +161,16 @@ const mutations = {
     // command mutation: forwarded to the server by the socket plugin
     state.lastError = null;
   },
+  setToken(state) {
+    // command mutation: forwarded to the server by the socket plugin
+    state.lastError = null;
+    state.tokenSaved = null;
+  },
+  setTokenSaved(state, payload) {
+    // ack of kook/setToken: { configured, verified } from the server
+    state.tokenSaved = { ...payload, ts: Date.now() };
+    if (payload && payload.configured) state.lastError = null;
+  },
   setLastGuildId(state, guildId) {
     state.lastGuildId = guildId || "";
   },
@@ -191,12 +202,12 @@ const mutations = {
     state.deafened = [];
     state.bindings = {};
     state.lastError = null;
-  }
+  },
 };
 
 export default {
   namespaced: true,
   state,
   getters,
-  mutations
+  mutations,
 };

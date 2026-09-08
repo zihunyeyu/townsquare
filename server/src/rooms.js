@@ -114,8 +114,9 @@ class RoomManager extends EventEmitter {
   }
 
   /**
-   * Host disconnected. Start the grace timer; when it expires, the room is
-   * closed and remaining players are kicked so they return to the intro.
+   * Host disconnected. Start the grace timer for a reclaim; when it expires,
+   * only a completely empty room is reaped (a room with players stays
+   * unhosted until the storyteller returns or everyone leaves).
    */
   dropHost(room) {
     if (room.host) {
@@ -123,22 +124,31 @@ class RoomManager extends EventEmitter {
       room.hostPlayerId = null;
     }
     this.emit("roomUnhosted", room.id);
-    if (room.players.size === 0) {
-      this._destroy(room);
-      return;
-    }
     if (room.graceTimer) clearTimeout(room.graceTimer);
+    // A room is destroyed only by an explicit dissolve or when it is
+    // completely empty. The grace timer gives a disconnected storyteller
+    // (page refresh, network blip) time to reclaim; when it expires, only a
+    // playerless room is reaped - a room with players simply stays unhosted
+    // until the storyteller returns or everyone leaves.
     room.graceTimer = setTimeout(() => {
-      for (const ws of room.players.values()) {
-        try {
-          ws.send(JSON.stringify(["alertPopup", "说书人已离开，房间已关闭"]));
-          ws.close(1000);
-        } catch (err) {
-          /* ignore */
-        }
-      }
-      this._destroy(room);
+      if (room.players.size === 0) this._destroy(room);
     }, HOST_GRACE_MS);
+  }
+
+  /**
+   * Explicit dissolve by the storyteller: kick every player back to the
+   * intro and destroy the room right away.
+   */
+  dissolve(room) {
+    for (const ws of room.players.values()) {
+      try {
+        ws.send(JSON.stringify(["alertPopup", "说书人已解散房间"]));
+        ws.close(1000);
+      } catch (err) {
+        /* ignore */
+      }
+    }
+    this._destroy(room);
   }
 
   _cleanupIfEmpty(room) {

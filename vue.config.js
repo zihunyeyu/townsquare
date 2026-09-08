@@ -4,11 +4,11 @@ module.exports = {
   // publicPath: process.env.NODE_ENV === "production" ? "/" : "/", // other config
   pages: {
     index: {
-      entry: 'src/main.js',
-      template: 'public/index.html',
-      filename: 'index.html',
-      chunks: ['chunk-vendors', 'chunk-common', 'index']
-    }
+      entry: "src/main.js",
+      template: "public/index.html",
+      filename: "index.html",
+      chunks: ["chunk-vendors", "chunk-common", "index"],
+    },
   },
-  productionSourceMap: false
+  productionSourceMap: false,
 };

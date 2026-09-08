@@ -1,11 +1,13 @@
 <template>
   <Modal v-if="modals.fabled && fabled.length" @close="toggleModal('fabled')">
-    <h3>
-      选择一个传奇角色
-    </h3>
+    <h3>选择一个传奇角色</h3>
     <ul class="tokens">
-      <li v-for="role in fabled" :key="role.id" @click="setFabled(role)"
-        :style="tokenWidth">
+      <li
+        v-for="role in fabled"
+        :key="role.id"
+        @click="setFabled(role)"
+        :style="tokenWidth"
+      >
         <Token :role="role" />
       </li>
     </ul>
@@ -23,10 +25,13 @@ export default {
     ...mapState(["modals", "fabled", "grimoire"]),
     fabled() {
       const fabled = [];
-      this.$store.state.fabled.forEach(role => {
+      this.$store.state.fabled.forEach((role) => {
         // don't show fabled that are already in play
         if (
-          !this.$store.state.players.fabled.some(fable => fable.id === role.id) || role.id === "deusexfiascoold2" // 失败的上帝（非官方）可以循环使用
+          !this.$store.state.players.fabled.some(
+            (fable) => fable.id === role.id,
+          ) ||
+          role.id === "deusexfiascoold2" // 失败的上帝（非官方）可以循环使用
         ) {
           fabled.push(role);
         }
@@ -34,36 +39,36 @@ export default {
       return fabled;
     },
     tokenWidth() {
-      const percentage = 0.06
+      const percentage = 0.06;
       const width = percentage * this.windowWidth;
       return width >= 80 ? "width: 6vw" : "width: 80px";
     },
   },
-  data(){
+  data() {
     return {
       windowWidth: window.innerWidth,
-      windowHeight: window.innerHeight
-    }
+      windowHeight: window.innerHeight,
+    };
   },
-  mounted(){
+  mounted() {
     window.addEventListener("resize", this.handleResize);
   },
-  beforeDestroy(){
+  beforeDestroy() {
     window.removeEventListener("resize", this.handleResize);
   },
   methods: {
     setFabled(role) {
       this.$store.commit("players/setFabled", {
-        fabled: role
+        fabled: role,
       });
       this.$store.commit("toggleModal", "fabled");
     },
-    handleResize(){
+    handleResize() {
       this.windowWidth = window.innerWidth;
       this.windowHeight = window.innerHeight;
     },
-    ...mapMutations(["toggleModal"])
-  }
+    ...mapMutations(["toggleModal"]),
+  },
 };
 </script>
 

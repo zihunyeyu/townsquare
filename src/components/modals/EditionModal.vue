@@ -8,9 +8,9 @@
           class="edition"
           :class="['edition-' + edition.id]"
           :style="{
-            backgroundImage: `url(${require('../../assets/editions/' +
-              edition.id +
-              '.png')})`
+            backgroundImage: `url(${require(
+              '../../assets/editions/' + edition.id + '.png',
+            )})`,
           }"
           :key="edition.id"
           @click="setHomeEdition(edition)"
@@ -21,7 +21,7 @@
           class="edition edition-custom"
           @click="isCustom = true"
           :style="{
-            backgroundImage: `url(${require('../../assets/editions/custom.png')})`
+            backgroundImage: `url(${require('../../assets/editions/custom.png')})`,
           }"
         >
           自定义剧本/角色
@@ -35,7 +35,7 @@
         >官方（中文）剧本工具</a
       >
       中选择想玩的角色然后上传生成的"custom-list.json"文件或提供包含JSON文件的URL链接。
-      
+
       <br />
       若想玩自定义角色，请查阅关于如何编写自定义角色定义文件的文档。
       <br />
@@ -81,46 +81,46 @@ import Modal from "./Modal";
 
 export default {
   components: {
-    Modal
+    Modal,
   },
-  data: function() {
+  data: function () {
     return {
       editions: editionJSON,
       isCustom: false,
       scripts: [
         [
           "死罪忏悔日",
-          "https://gist.githubusercontent.com/bra1n/0337cc44c6fd2c44f7589256ed5486d2/raw/16be38fa3c01aaf49827303ac80577bdb52c0b25/penanceday.json"
+          "https://gist.githubusercontent.com/bra1n/0337cc44c6fd2c44f7589256ed5486d2/raw/16be38fa3c01aaf49827303ac80577bdb52c0b25/penanceday.json",
         ],
         [
           "人人都该诋毁的鲶鱼11.1",
-          "https://gist.githubusercontent.com/bra1n/8a5ec41a7bbf945f6b7dfc1cef72b569/raw/a312ab93c2f302e0ef83c8b65a4e8e82760fda3a/catfishing.json"
+          "https://gist.githubusercontent.com/bra1n/8a5ec41a7bbf945f6b7dfc1cef72b569/raw/a312ab93c2f302e0ef83c8b65a4e8e82760fda3a/catfishing.json",
         ],
         [
           "如履薄冰（小剧本）",
-          "https://gist.githubusercontent.com/bra1n/8dacd9f2abc6f428331ea1213ab153f5/raw/0cacbcaf8ed9bddae0cca25a9ada97e9958d868b/on-thin-ice.json"
+          "https://gist.githubusercontent.com/bra1n/8dacd9f2abc6f428331ea1213ab153f5/raw/0cacbcaf8ed9bddae0cca25a9ada97e9958d868b/on-thin-ice.json",
         ],
         [
           "逐底竞技（小剧本）",
-          "https://gist.githubusercontent.com/bra1n/63e1354cb3dc9d4032bcd0623dc48888/raw/5acb0eedcc0a67a64a99c7e0e6271de0b7b2e1b2/race-to-the-bottom.json"
+          "https://gist.githubusercontent.com/bra1n/63e1354cb3dc9d4032bcd0623dc48888/raw/5acb0eedcc0a67a64a99c7e0e6271de0b7b2e1b2/race-to-the-bottom.json",
         ],
         [
           "失控造物（小剧本）",
-          "https://gist.githubusercontent.com/bra1n/32c52b422cc01b934a4291eeb81dbcee/raw/5bf770693bbf7aff5e86601c82ca4af3222f4ba6/Frankensteins_Mayor_by_Ted.json"
+          "https://gist.githubusercontent.com/bra1n/32c52b422cc01b934a4291eeb81dbcee/raw/5bf770693bbf7aff5e86601c82ca4af3222f4ba6/Frankensteins_Mayor_by_Ted.json",
         ],
         [
           "永生之境（小剧本）",
-          "https://gist.githubusercontent.com/bra1n/1f65bd4a999524719d5dabe98c3c2d27/raw/22bbec6bf56a51a7459e5ae41ed47e41971c5445/VigormortisHighSchool.json"
+          "https://gist.githubusercontent.com/bra1n/1f65bd4a999524719d5dabe98c3c2d27/raw/22bbec6bf56a51a7459e5ae41ed47e41971c5445/VigormortisHighSchool.json",
         ],
         [
           "无上愉悦（小剧本）",
-          "https://botcgrimoire.top/json/no_greater_joy.json"
+          "https://botcgrimoire.top/json/no_greater_joy.json",
         ],
         [
           "噬脑疑局（小剧本）",
-          "https://botcgrimoire.top/json/a_lleach_of_distrust.json"
-        ]
-      ]
+          "https://botcgrimoire.top/json/a_lleach_of_distrust.json",
+        ],
+      ],
     };
   },
   computed: mapState(["modals", "selectedEditions"]),
@@ -137,8 +137,8 @@ export default {
         this.$store.commit("toggleModal", "input");
       });
     },
-    closeEdition(){
-      this.toggleModal('edition');
+    closeEdition() {
+      this.toggleModal("edition");
       this.isCustom = false;
     },
     openUpload() {
@@ -159,7 +159,7 @@ export default {
               inputModal: "text",
               inputData: {
                 name: ["读取剧本错误：自定义剧本内容不是有效的JSON文件！"],
-              }
+              },
             }).catch(() => {
               return null;
             });
@@ -177,8 +177,8 @@ export default {
         inputData: {
           name: ["输入custom-script.json文件的URL"],
           length: 1,
-          placeholder: [""]
-        }
+          placeholder: [""],
+        },
       }).catch(() => {
         return null;
       });
@@ -202,7 +202,7 @@ export default {
             inputModal: "text",
             inputData: {
               name: ["读取剧本错误：URL内容不是有效的JSON文件！"],
-            }
+            },
           }).catch(() => {
             return null;
           });
@@ -222,7 +222,7 @@ export default {
           inputModal: "text",
           inputData: {
             name: ["读取剧本错误：剪贴板内容不是有效的JSON文件！"],
-          }
+          },
         }).catch(() => {
           return null;
         });
@@ -231,34 +231,39 @@ export default {
     },
     parseRoles(roles) {
       if (!roles || !roles.length) return;
-      roles = roles.map(role => typeof role === "string" ? { id: role } : role);
+      roles = roles.map((role) =>
+        typeof role === "string" ? { id: role } : role,
+      );
       const metaIndex = roles.findIndex(({ id }) => id === "_meta");
       let meta = {};
       if (metaIndex > -1) {
         meta = roles.splice(metaIndex, 1).pop();
       }
       if (meta.bootlegger) {
-        for (let i=0; i<meta.bootlegger.length; i++) {
+        for (let i = 0; i < meta.bootlegger.length; i++) {
           roles.push({
-            "id": `bootlegger${i}`,
-            "reminders": [],
-            "setup": false,
-            "name": `私货商人${i+1}`,
-            "team": "fabled",
-            "ability": meta.bootlegger[i]
+            id: `bootlegger${i}`,
+            reminders: [],
+            setup: false,
+            name: `私货商人${i + 1}`,
+            team: "fabled",
+            ability: meta.bootlegger[i],
           });
         }
       }
       this.$store.commit("setCustomRoles", roles);
       this.$store.commit(
         "setEdition",
-        Object.assign({}, meta, { id: "custom" })
+        Object.assign({}, meta, { id: "custom" }),
       );
       // check for fabled and set those too, if present
       if (roles.some((role) => this.$store.state.fabled.has(role.id || role))) {
         const fabled = [];
         roles.forEach((role) => {
-          if (this.$store.state.fabled.has(role.id || role) && (!meta.bootlegger || role.id !== 'bootlegger')) {
+          if (
+            this.$store.state.fabled.has(role.id || role) &&
+            (!meta.bootlegger || role.id !== "bootlegger")
+          ) {
             fabled.push(this.$store.state.fabled.get(role.id || role));
           }
         });
@@ -268,7 +273,9 @@ export default {
     },
     parseStates(roles) {
       if (!roles || !roles.length) return;
-      roles = roles.map(role => typeof role === "string" ? { id: role } : role);
+      roles = roles.map((role) =>
+        typeof role === "string" ? { id: role } : role,
+      );
       const metaIndex = roles.findIndex(({ id }) => id === "_meta");
       let meta = {};
       if (metaIndex > -1) {
@@ -276,14 +283,14 @@ export default {
       }
       //状态
       const states = [];
-      if (meta.state){
-        meta.state.forEach(state => {
-          states.push({[state.stateName] : state.stateDescription});
-        })
-      } else if (meta.status){
-        meta.status.forEach(state => {
-          states.push({[state.name] : state.skill});
-        })
+      if (meta.state) {
+        meta.state.forEach((state) => {
+          states.push({ [state.stateName]: state.stateDescription });
+        });
+      } else if (meta.status) {
+        meta.status.forEach((state) => {
+          states.push({ [state.name]: state.skill });
+        });
       }
       this.$store.commit("setStates", states);
       // 角色类型名字
@@ -291,29 +298,36 @@ export default {
         townsfolk: meta.townsfolksName ? meta.townsfolksName : "镇民",
         outsider: meta.outsidersName ? meta.outsidersName : "外来者",
         minion: meta.minionsName ? meta.minionsName : "爪牙",
-        demon: meta.demonsName ? meta.demonsName : "恶魔"
-      }
+        demon: meta.demonsName ? meta.demonsName : "恶魔",
+      };
       this.$store.commit("setTeamsNames", names);
       // 夜间顺序
       if (!!meta.firstNight && meta.firstNight.length > 0) {
-        const firstNight = meta.firstNight.map(role => role.toLocaleLowerCase().replace(/[^a-z0-9]/g, ""));
+        const firstNight = meta.firstNight.map((role) =>
+          role.toLocaleLowerCase().replace(/[^a-z0-9]/g, ""),
+        );
         this.$store.commit("setFirstNight", firstNight);
       } else {
         this.$store.commit("setFirstNight", []);
       }
       if (!!meta.otherNight && meta.otherNight.length > 0) {
-        const otherNight = meta.otherNight.map(role => role.toLocaleLowerCase().replace(/[^a-z0-9]/g, ""));
+        const otherNight = meta.otherNight.map((role) =>
+          role.toLocaleLowerCase().replace(/[^a-z0-9]/g, ""),
+        );
         this.$store.commit("setOtherNight", otherNight);
       } else {
         this.$store.commit("setOtherNight", []);
       }
     },
     setHomeEdition(edition) {
-      if (["tb", "bmr", "snv", "luf", "all", "custom_ankot"].includes(edition.id)) this.$store.commit("setStates", []);
+      if (
+        ["tb", "bmr", "snv", "luf", "all", "custom_ankot"].includes(edition.id)
+      )
+        this.$store.commit("setStates", []);
       this.setEdition(edition, this.selectedEditions);
     },
-    ...mapMutations(["toggleModal", "setEdition"])
-  }
+    ...mapMutations(["toggleModal", "setEdition"]),
+  },
 };
 </script>
 
@@ -330,8 +344,12 @@ ul.editions .edition {
   width: 250px;
   margin: 5px;
   font-size: 120%;
-  text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000,
-    1px 1px 0 #000, 0 0 5px rgba(0, 0, 0, 0.75);
+  text-shadow:
+    -1px -1px 0 #000,
+    1px -1px 0 #000,
+    -1px 1px 0 #000,
+    1px 1px 0 #000,
+    0 0 5px rgba(0, 0, 0, 0.75);
   cursor: pointer;
   &:hover {
     color: red;

@@ -31,10 +31,10 @@ import { mapMutations, mapState } from "vuex";
 
 export default {
   components: {
-    Modal
+    Modal,
   },
   computed: {
-    gamestate: function() {
+    gamestate: function () {
       return JSON.stringify({
         bluffs: this.players.bluffs.map(({ id }) => id),
         edition: this.edition.isOfficial
@@ -43,20 +43,20 @@ export default {
         roles: this.edition.isOfficial
           ? ""
           : this.$store.getters.customRolesStripped,
-        fabled: this.players.fabled.map(fabled =>
-          fabled.isCustom ? fabled : { id: fabled.id }
+        fabled: this.players.fabled.map((fabled) =>
+          fabled.isCustom ? fabled : { id: fabled.id },
         ),
-        players: this.players.players.map(player => ({
+        players: this.players.players.map((player) => ({
           ...player,
-          role: player.role.id || {}
-        }))
+          role: player.role.id || {},
+        })),
       });
     },
-    ...mapState(["modals", "players", "edition", "roles", "session"])
+    ...mapState(["modals", "players", "edition", "roles", "session"]),
   },
   data() {
     return {
-      input: ""
+      input: "",
     };
   },
   methods: {
@@ -72,7 +72,7 @@ export default {
         this.$store.commit("toggleModal", "input");
       });
     },
-    copy: function() {
+    copy: function () {
       navigator.clipboard.writeText(this.input || this.gamestate);
     },
     async loadGrimoire() {
@@ -86,66 +86,72 @@ export default {
           this.$store.commit("setEdition", edition);
           // 状态
           const states = [];
-          if (edition.state && edition.state.length > 0){
-            edition.state.forEach(state => {
-              states.push({[state.stateName] : state.stateDescription});
-            })
-          } else if (edition.status && edition.status.length > 0){
-            edition.status.forEach(state => {
-              states.push({[state.name] : state.skill});
-            })
+          if (edition.state && edition.state.length > 0) {
+            edition.state.forEach((state) => {
+              states.push({ [state.stateName]: state.stateDescription });
+            });
+          } else if (edition.status && edition.status.length > 0) {
+            edition.status.forEach((state) => {
+              states.push({ [state.name]: state.skill });
+            });
           }
           // 类型名称
           const names = {
             townsfolk: edition.townsfolksName ? edition.townsfolksName : "镇民",
             outsider: edition.outsidersName ? edition.outsidersName : "外来者",
             minion: edition.minionsName ? edition.minionsName : "爪牙",
-            demon: edition.demonsName ? edition.demonsName : "恶魔"
-          }
+            demon: edition.demonsName ? edition.demonsName : "恶魔",
+          };
           this.$store.commit("setTeamsNames", names);
         }
         if (bluffs.length) {
           bluffs.forEach((role, index) => {
             this.$store.commit("players/setBluff", {
               index,
-              role: this.$store.state.roles.get(role) || {}
+              role: this.$store.state.roles.get(role) || {},
             });
           });
         }
         if (fabled && !this.session.isSpectator) {
-          const fabledNoSt = fabled.filter(role => role.id != "storyteller");
+          const fabledNoSt = fabled.filter((role) => role.id != "storyteller");
           this.$store.commit("players/setFabled", {
             fabled: fabledNoSt.map(
-              f =>
+              (f) =>
                 this.$store.state.fabled.get(f) ||
                 this.$store.state.fabled.get(f.id) ||
-                f
-            )
+                f,
+            ),
           });
         }
         if (players && players.length > 0) {
           const mappedPlayers = this.players.players;
-          for (let i=0; i<players.length; i++) {
+          for (let i = 0; i < players.length; i++) {
             if (i >= mappedPlayers.length) {
               if (!this.session.isSpectator) {
-                this.$store.commit("players/add", "")
+                this.$store.commit("players/add", "");
               } else {
                 break;
               }
             }
             const player = players[i];
-            const role = this.roles.get(player.role) ? this.roles.get(player.role) : {};
+            const role = this.roles.get(player.role)
+              ? this.roles.get(player.role)
+              : {};
             const mappedPlayer = mappedPlayers[i];
-            if (role.team != 'traveler' && mappedPlayer.role.team != 'traveler' || !this.session.isSpectator) {
+            if (
+              (role.team != "traveler" &&
+                mappedPlayer.role.team != "traveler") ||
+              !this.session.isSpectator
+            ) {
               this.$store.commit("players/update", {
                 player: mappedPlayer,
                 property: "role",
-                value: role
+                value: role,
               });
               this.$store.commit("players/update", {
                 player: mappedPlayer,
                 property: "reminders",
-                value: player.reminders
+                value: player.reminders,
               });
             }
           }
@@ -157,7 +163,7 @@ export default {
           inputModal: "text",
           inputData: {
             name: ["无法加载JSON：" + e],
-          }
+          },
         }).catch(() => {
           return null;
         });
@@ -170,8 +176,8 @@ export default {
         inputType: "confirm",
         inputModal: "confirm",
         inputData: {
-          name: ["确定要加载所有状态吗？（包括玩家、头像等）"]
-        }
+          name: ["确定要加载所有状态吗？（包括玩家、头像等）"],
+        },
       }).catch(() => {
         return null;
       });
@@ -191,31 +197,31 @@ export default {
           bluffs.forEach((role, index) => {
             this.$store.commit("players/setBluff", {
               index,
-              role: this.$store.state.roles.get(role) || {}
+              role: this.$store.state.roles.get(role) || {},
             });
           });
         }
         if (fabled) {
-          const fabledNoSt = fabled.filter(role => role.id != "storyteller");
+          const fabledNoSt = fabled.filter((role) => role.id != "storyteller");
           this.$store.commit("players/setFabled", {
             fabled: fabledNoSt.map(
-              f =>
+              (f) =>
                 this.$store.state.fabled.get(f) ||
                 this.$store.state.fabled.get(f.id) ||
-                f
-            )
+                f,
+            ),
           });
         }
         if (players) {
           this.$store.commit(
             "players/set",
-            players.map(player => ({
+            players.map((player) => ({
               ...player,
               role:
                 this.$store.state.roles.get(player.role) ||
                 this.$store.getters.rolesJSONbyId.get(player.role) ||
-                {}
-            }))
+                {},
+            })),
           );
         }
         // this.toggleModal("gameState");
@@ -225,15 +231,15 @@ export default {
           inputModal: "text",
           inputData: {
             name: ["无法加载JSON：" + e],
-          }
+          },
         }).catch(() => {
           return null;
         });
         return;
       }
     },
-    ...mapMutations(["toggleModal"])
-  }
+    ...mapMutations(["toggleModal"]),
+  },
 };
 </script>
 

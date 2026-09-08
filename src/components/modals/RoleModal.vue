@@ -12,7 +12,12 @@
     <ul class="tokens" v-if="tab === 'editionRoles' || !otherTravelers.size">
       <li
         v-for="role in availableRoles"
-        v-show="(!role.id && !role.name) || ['townsfolk', 'outsider', 'minion', 'demon'].includes(role.team) || (role.team == 'traveler' && (!session.isSpectator || isShowTraveler && playerIndex < 0))"
+        v-show="
+          (!role.id && !role.name) ||
+          ['townsfolk', 'outsider', 'minion', 'demon'].includes(role.team) ||
+          (role.team == 'traveler' &&
+            (!session.isSpectator || (isShowTraveler && playerIndex < 0)))
+        "
         :class="[role.team]"
         :key="role.id"
         @click="setRole(role)"
@@ -21,10 +26,18 @@
         <Token :role="role" />
       </li>
     </ul>
-    <ul class="tokens" v-if="tab === 'editionRolesFull' || !otherTravelers.size">
+    <ul
+      class="tokens"
+      v-if="tab === 'editionRolesFull' || !otherTravelers.size"
+    >
       <li
         v-for="role in availableRoles"
-        v-show="(!role.id && !role.name) || ['townsfolk', 'outsider', 'minion', 'demon'].includes(role.team) || (role.team == 'traveler' &&  (!session.isSpectator || isShowTraveler && playerIndex < 0))"
+        v-show="
+          (!role.id && !role.name) ||
+          ['townsfolk', 'outsider', 'minion', 'demon'].includes(role.team) ||
+          (role.team == 'traveler' &&
+            (!session.isSpectator || (isShowTraveler && playerIndex < 0)))
+        "
         :class="[role.team]"
         :key="role.id"
         @click="setRole(role)"
@@ -52,20 +65,18 @@
         class="button"
         :class="{ townsfolk: tab === 'editionRoles' }"
         @click="tab = 'editionRoles'"
-        >
+      >
         <span v-if="playerIndex >= 0">剧本角色</span>
         <span v-else>不在场角色</span>
-        </span
-      >
+      </span>
       <span
         v-if="playerIndex < 0"
         class="button"
         :class="{ townsfolk: tab === 'editionRolesFull' }"
         @click="tab = 'editionRolesFull'"
-        >
-        全部角色
-        </span
       >
+        全部角色
+      </span>
       <span
         v-if="playerIndex >= 0"
         class="button"
@@ -82,10 +93,7 @@
       <span>显示旅行者</span> &nbsp;
       <em>
         <font-awesome-icon
-          :icon="[
-            'fas',
-            isShowTraveler ? 'check-square' : 'square'
-          ]"
+          :icon="['fas', isShowTraveler ? 'check-square' : 'square']"
         />
       </em>
     </div>
@@ -104,13 +112,13 @@ export default {
     availableRoles() {
       const availableRoles = [];
       const players = this.$store.state.players.players;
-      this.$store.state.roles.forEach(role => {
+      this.$store.state.roles.forEach((role) => {
         // don't show bluff roles that are already assigned to players
         if (
           this.tab === "editionRolesFull" ||
           this.playerIndex >= 0 ||
           (this.playerIndex < 0 &&
-            !players.some(player => player.role.id === role.id))
+            !players.some((player) => player.role.id === role.id))
         ) {
           availableRoles.push(role);
         }
@@ -119,30 +127,30 @@ export default {
       return availableRoles;
     },
     tokenWidth() {
-      const percentage = 0.06
+      const percentage = 0.06;
       const width = percentage * this.windowWidth;
       return width >= 80 ? "width: 6vw" : "width: 80px";
     },
     ...mapState(["modals", "roles", "session"]),
     ...mapState("players", ["players"]),
-    ...mapState(["otherTravelers"])
+    ...mapState(["otherTravelers"]),
   },
   data() {
     return {
       tab: "editionRoles",
       isShowTraveler: false,
       windowWidth: window.innerWidth,
-      windowHeight: window.innerHeight
+      windowHeight: window.innerHeight,
     };
   },
-  mounted(){
+  mounted() {
     window.addEventListener("resize", this.handleResize);
   },
-  beforeDestroy(){
+  beforeDestroy() {
     window.removeEventListener("resize", this.handleResize);
   },
   methods: {
-    handleResize(){
+    handleResize() {
       this.windowWidth = window.innerWidth;
       this.windowHeight = window.innerHeight;
     },
@@ -151,7 +159,7 @@ export default {
         // assign to bluff slot (index < 0)
         this.$store.commit("players/setBluff", {
           index: this.playerIndex * -1 - 1,
-          role
+          role,
         });
       } else {
         if (this.session.isSpectator && role.team === "traveler") return;
@@ -160,7 +168,7 @@ export default {
         this.$store.commit("players/update", {
           player,
           property: "role",
-          value: role
+          value: role,
         });
       }
       this.tab = "editionRoles";
@@ -173,8 +181,8 @@ export default {
     toggleShowTraveler() {
       this.isShowTraveler = !this.isShowTraveler;
     },
-    ...mapMutations(["toggleModal"])
-  }
+    ...mapMutations(["toggleModal"]),
+  },
 };
 </script>
 
@@ -188,19 +196,29 @@ ul.tokens li {
   transition: transform 500ms ease;
 
   &.townsfolk {
-    box-shadow: 0 0 10px $townsfolk, 0 0 10px #004cff;
+    box-shadow:
+      0 0 10px $townsfolk,
+      0 0 10px #004cff;
   }
   &.outsider {
-    box-shadow: 0 0 10px $outsider, 0 0 10px $outsider;
+    box-shadow:
+      0 0 10px $outsider,
+      0 0 10px $outsider;
   }
   &.minion {
-    box-shadow: 0 0 10px $minion, 0 0 10px $minion;
+    box-shadow:
+      0 0 10px $minion,
+      0 0 10px $minion;
   }
   &.demon {
-    box-shadow: 0 0 10px $demon, 0 0 10px $demon;
+    box-shadow:
+      0 0 10px $demon,
+      0 0 10px $demon;
   }
   &.traveler {
-    box-shadow: 0 0 10px $traveler, 0 0 10px $traveler;
+    box-shadow:
+      0 0 10px $traveler,
+      0 0 10px $traveler;
   }
   &:hover {
     transform: scale(1.2);
@@ -209,18 +227,17 @@ ul.tokens li {
 }
 
 .check-box {
-  display: flex; 
-  justify-content: center; 
+  display: flex;
+  justify-content: center;
   align-items: center;
-  width: fit-content; 
+  width: fit-content;
 
   margin-left: auto;
   margin-right: auto;
-  
-  cursor: pointer; 
+
+  cursor: pointer;
   &:hover {
     color: red;
   }
 }
-
 </style>

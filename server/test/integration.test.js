@@ -452,7 +452,7 @@ function makeFakeKook() {
     }
   }
   const voice = new FakeVoice();
-  const calls = { moveUsers: [], muteUser: [], unmuteUser: [] };
+  const calls = { moveUsers: [], muteUser: [], unmuteUser: [], setToken: [] };
   return {
     calls,
     _voice: voice,
@@ -460,6 +460,10 @@ function makeFakeKook() {
     voices: new Map([["g1", voice]]),
     async getVoice() {
       return voice;
+    },
+    async setToken(token) {
+      calls.setToken.push(token);
+      return { configured: !!token, verified: false };
     },
     api: {
       async guildUserList(guildId, search) {
@@ -656,6 +660,66 @@ test("kook: unbindUser removes the sender's binding", async () => {
   await err;
   host.close();
   player.close();
+});
+
+test("kook: setToken is host-only and acknowledges the configured state", async () => {
+  const host = await connect(`${GAME_URL}/9023/hostT/host?auth=secret23`);
+  send(host, "request", { checkAllowHost: ["hostT", null] });
+  await nextMessage(host, ([c]) => c === "allowHost", "allowHost");
+  const player = await connect(`${GAME_URL}/9023/p24`);
+
+  // a regular player may not touch the bot token
+  const denied = nextMessage(
+    player,
+    ([c, p]) => c === "kookError" && p.op === "setToken",
+    "kookError setToken"
+  );
+  send(player, "request", { kookSetToken: ["p24", { token: "player-token" }] });
+  await denied;
+
+  // the host sets the token; the ack carries no token, only the state
+  const ack = nextMessage(
+    host,
+    ([c, p]) =>
+      c === "kookTokenSet" &&
+      p.configured === true &&
+      !String(JSON.stringify(p)).includes("bot-token-123"),
+    "kookTokenSet"
+  );
+  send(host, "request", { kookSetToken: ["hostT", { token: "bot-token-123" }] });
+  await ack;
+
+  host.close();
+  player.close();
+});
+
+test("room: dissolveRoom kicks players and destroys the room", async () => {
+  const host = await connect(`${GAME_URL}/9024/hostD/host?auth=secret24`);
+  send(host, "request", { checkAllowHost: ["hostD", null] });
+  await nextMessage(host, ([c]) => c === "allowHost", "allowHost");
+  const player = await connect(`${GAME_URL}/9024/p25`);
+
+  // a player may not dissolve the room
+  send(player, "request", { dissolveRoom: ["p25", null] });
+  await sleep(200);
+
+  // the host dissolves: the player is notified and dropped, the room dies
+  const alert = nextMessage(player, ([c]) => c === "alertPopup", "alertPopup");
+  const closed = new Promise((resolve) => player.on("close", resolve));
+  send(host, "request", { dissolveRoom: ["hostD", null] });
+  await alert;
+  await closed;
+
+  // the same channel id is immediately available for a fresh room
+  const host2 = await connect(`${GAME_URL}/9024/hostE/host?auth=secret25`);
+  send(host2, "request", { checkAllowHost: ["hostE", null] });
+  await nextMessage(
+    host2,
+    ([c, p]) => c === "allowHost" && p === true,
+    "allowHost on fresh room"
+  );
+  host.close();
+  host2.close();
 });
 
 // ------------------------------------------------------------------ runner

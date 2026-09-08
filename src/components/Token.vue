@@ -1,6 +1,9 @@
 <template>
-  <div class="token" @click="setRole" :class="[role.id]" 
-  :style="tokenBackground"
+  <div
+    class="token"
+    @click="setRole"
+    :class="[role.id]"
+    :style="tokenBackground"
   >
     <span
       class="icon"
@@ -9,8 +12,12 @@
         backgroundImage: `url(${
           role.image && grimoire.isImageOptIn
             ? role.image
-            : require('../assets/icons/' + (role.imageAlt || role.id.replace(/old1$/, '')) + '.png')
-        })`
+            : require(
+                '../assets/icons/' +
+                  (role.imageAlt || role.id.replace(/old1$/, '')) +
+                  '.png',
+              )
+        })`,
       }"
     ></span>
     <span
@@ -56,45 +63,46 @@ export default {
   props: {
     role: {
       type: Object,
-      default: () => ({})
+      default: () => ({}),
     },
     id: {
       type: String,
-      default: ""
+      default: "",
     },
     image: {
       type: String,
-      default: ""
-    }
+      default: "",
+    },
   },
   computed: {
-    reminderLeaves: function() {
+    reminderLeaves: function () {
       return (
         (this.role.reminders || []).length +
         (this.role.remindersGlobal || []).length
       );
     },
     tokenBackground() {
-      return (!!this.id && !!this.image) ? {} : {backgroundImage: `url(${require('../assets/token.png')})`}
+      return !!this.id && !!this.image
+        ? {}
+        : { backgroundImage: `url(${require("../assets/token.png")})` };
     },
-    ...mapState(["grimoire"])
+    ...mapState(["grimoire"]),
   },
   data() {
     return {};
   },
   filters: {
-    nameToFontSize: name => (name && name.length > 10 ? "90%" : "110%")
+    nameToFontSize: (name) => (name && name.length > 10 ? "90%" : "110%"),
   },
   methods: {
     setRole() {
       this.$emit("set-role");
-    }
-  }
+    },
+  },
 };
 </script>
 
 <style scoped lang="scss">
-
 .token {
   border-radius: 50%;
   width: 100%;

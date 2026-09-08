@@ -167,6 +167,7 @@ test("service: routes voice events by top-level target_id (KOOK doc shape)", () 
   const received = [];
   svc.voices.set("g1", {
     users: new Map(),
+    channels: new Map([["vc1", {}]]),
     handleEvent: (d) => received.push(d),
   });
   // joined_channel per the official docs: guild id only in target_id
@@ -180,6 +181,18 @@ test("service: routes voice events by top-level target_id (KOOK doc shape)", () 
     },
   });
   assert.strictEqual(received.length, 1);
+  // fallback: shapes whose target_id is NOT the guild id still route via
+  // the affected channel id
+  svc._route({
+    channel_type: "GROUP",
+    target_id: "vc1",
+    type: 255,
+    extra: {
+      type: "exited_channel",
+      body: { user_id: "u9", channel_id: "vc1" },
+    },
+  });
+  assert.strictEqual(received.length, 2);
   // PERSON events without a known guild/user must not reach the voice cache
   svc._route({
     channel_type: "PERSON",
@@ -187,7 +200,17 @@ test("service: routes voice events by top-level target_id (KOOK doc shape)", () 
     type: 255,
     extra: { type: "user_updated", body: { user_id: "nobody" } },
   });
-  assert.strictEqual(received.length, 1);
+  assert.strictEqual(received.length, 2);
+});
+
+test("voice: resync emits change so clients see the corrected state", async () => {
+  const v = new KookVoice(makeApi(), "g1");
+  await v.init();
+  let changes = 0;
+  v.on("change", () => changes++);
+  await v.resync();
+  assert.ok(changes >= 1, "resync must emit change");
+  v.destroy();
 });
 
 test("gateway: hello, heartbeat and sn-ordered event delivery", async () => {

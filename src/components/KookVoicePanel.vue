@@ -1,59 +1,48 @@
 <template>
   <div v-if="session.sessionId">
-    <div
+    <!-- floating toggle: click to open/close the panel -->
+    <button
       ref="toggle"
       class="kook-toggle"
-      :class="{ active: isOpen, 'edge-right': edge === 'right', dragging: dragging }"
-      :style="toggleStyle"
-      title="KOOK 语音(可拖动)"
-      @pointerdown="onPointerDown"
+      :class="{ active: isOpen }"
+      title="KOOK 语音"
+      @click.stop="togglePanel"
     >
       <img
         v-if="kook.guildIcon"
         class="guild-icon"
         :src="kook.guildIcon"
+        referrerpolicy="no-referrer"
         :alt="kook.guildName"
       />
       <font-awesome-icon v-else icon="volume-up" />
       <span v-if="kook.bound" class="live-dot"></span>
-    </div>
+    </button>
+
     <transition name="kook-slide">
-      <div
-        v-if="isOpen"
-        class="kook-voice-panel"
-        :class="{ 'edge-right': edge === 'right' }"
-        :style="panelStyle"
-        @click.stop
-      >
+      <div v-if="isOpen" ref="panel" class="kook-voice-panel" @click.stop>
         <h3>
           <font-awesome-icon icon="volume-up" class="title-icon" />
           <span class="title-text">KOOK 语音</span>
-          <span
-            v-if="kook.guildName"
-            class="guild-name"
-            :title="kook.guildName"
-          >— {{ kook.guildName }}</span>
-          <font-awesome-icon class="close" icon="times" @click="isOpen = false" />
+          <span v-if="kook.guildName" class="guild-name" :title="kook.guildName"
+            >— {{ kook.guildName }}</span
+          >
+          <font-awesome-icon
+            class="close"
+            icon="times"
+            @click="isOpen = false"
+          />
         </h3>
 
         <!-- room is not bound to a KOOK guild yet -->
         <div v-if="!kook.bound" class="bind-guild">
-          <template v-if="!session.isSpectator">
-            <p>输入 KOOK 服务器 ID,将本房间与该服务器的语音频道关联:</p>
-            <div class="row">
-              <input
-                v-model.trim="guildIdInput"
-                class="input"
-                placeholder="KOOK 服务器 ID"
-                @keyup.enter="bindGuild"
-              />
-              <button class="confirm-btn" @click="bindGuild">绑定</button>
-            </div>
-            <p class="hint">
-              服务器 ID 可在 KOOK 服务器设置中获得;机器人需已加入该服务器且拥有语音管理权限。
-            </p>
-          </template>
+          <p v-if="!session.isSpectator" class="hint">
+            尚未绑定 KOOK 服务器,请在 菜单 → KOOK 设置 中绑定。
+          </p>
           <p v-else class="hint">说书人尚未绑定 KOOK 服务器。</p>
+          <p v-if="kook.lastError" class="error-text">
+            {{ kook.lastError.message }}
+          </p>
         </div>
 
         <!-- bound: show voice channels -->
@@ -77,50 +66,55 @@
                 placeholder="KOOK用户名#识别号"
                 @keyup.enter="bindSelf"
               />
-              <button class="confirm-btn" @click="bindSelf">绑定我的 KOOK 账号</button>
+              <button class="confirm-btn" @click="bindSelf">
+                绑定我的 KOOK 账号
+              </button>
             </template>
           </div>
 
-          <p v-if="kook.lastError" class="error-text">{{ kook.lastError.message }}</p>
-
-          <div v-if="!session.isSpectator" class="row">
-            <span class="label">子房间分组</span>
-            <select v-model="categorySelection" class="input" @change="setCategory">
-              <option value="">全部语音频道</option>
-              <option v-for="cat in categories" :key="cat.id" :value="cat.id">
-                {{ cat.name }}
-              </option>
-            </select>
-          </div>
+          <p v-if="kook.lastError" class="error-text">
+            {{ kook.lastError.message }}
+          </p>
 
           <div v-if="!session.isSpectator" class="st-controls">
             <button class="confirm-btn" @click="muteAll(true)">全体闭麦</button>
             <button class="remove-btn" @click="muteAll(false)">解除闭麦</button>
-            <button class="remove-btn" @click="unbind">解绑服务器</button>
           </div>
 
           <ul class="channel-list">
-            <li v-for="channel in channelList" :key="channel.id" class="channel">
+            <li
+              v-for="channel in channelList"
+              :key="channel.id"
+              class="channel"
+            >
               <div class="channel-head">
                 <span class="channel-name">{{ channel.name }}</span>
                 <span class="channel-count">
                   {{ channel.users.length
-                  }}<template v-if="channel.limitAmount">/{{ channel.limitAmount }}</template>
+                  }}<template v-if="channel.limitAmount"
+                    >/{{ channel.limitAmount }}</template
+                  >
                 </span>
                 <button
-                  v-if="kook.selfKookId && isSelfBound && selfChannelId !== channel.id"
-                  class="confirm-btn small"
+                  v-if="
+                    kook.selfKookId &&
+                    isSelfBound &&
+                    selfChannelId !== channel.id
+                  "
+                  class="confirm-btn small icon-btn"
                   :class="{ disabled: !isSelfInVoice }"
+                  title="移动到此处"
                   @click="moveSelf(channel.id)"
                 >
-                  移动到此处
+                  <font-awesome-icon icon="sign-in-alt" />
                 </button>
                 <button
                   v-if="!session.isSpectator"
-                  class="confirm-btn small"
+                  class="confirm-btn small icon-btn"
+                  title="全员集合到此频道"
                   @click="moveAll(channel.id)"
                 >
-                  全员集合
+                  <font-awesome-icon icon="people-arrows" />
                 </button>
               </div>
               <div class="user-list">
@@ -134,12 +128,18 @@
                     v-if="user.avatar"
                     class="chip-avatar"
                     :src="user.avatar"
+                    referrerpolicy="no-referrer"
                     :alt="user.displayName"
                   />
                   <font-awesome-icon v-if="user.deafened" icon="volume-mute" />
-                  <font-awesome-icon v-else-if="user.muted" icon="microphone-slash" />
+                  <font-awesome-icon
+                    v-else-if="user.muted"
+                    icon="microphone-slash"
+                  />
                   {{ user.displayName }}
-                  <template v-if="seatOf(user.id)">({{ seatOf(user.id) }}号)</template>
+                  <template v-if="seatOf(user.id)"
+                    >({{ seatOf(user.id) }}号)</template
+                  >
                 </span>
                 <span v-if="!channel.users.length" class="empty">(空)</span>
               </div>
@@ -154,58 +154,21 @@
 <script>
 import { mapGetters, mapState } from "vuex";
 
-const STORAGE_KEY = "kookVoiceBtn";
-
 export default {
   computed: {
     ...mapState(["session", "kook"]),
     ...mapState("players", ["players"]),
     ...mapGetters("kook", [
       "channelList",
-      "categories",
       "isSelfInVoice",
       "selfChannelId",
-      "isSelfBound"
+      "isSelfBound",
     ]),
-    toggleStyle() {
-      const x = this.dragging
-        ? this.dragX
-        : this.edge === "left"
-        ? 0
-        : this.windowWidth - this.toggleWidth;
-      return { left: x + "px", top: this.posY + "px" };
-    },
-    panelStyle() {
-      // on narrow (mobile) screens the panel becomes a bottom sheet and is
-      // positioned entirely by CSS
-      if (this.windowWidth <= 768) return {};
-      // place the panel below the toggle (above it when near the viewport
-      // bottom) so the toggle never covers the expanded panel
-      const panelMaxH = this.windowHeight * 0.6;
-      let top = this.posY + this.toggleHeight + 8;
-      if (top + panelMaxH > this.windowHeight - 10) {
-        top = Math.max(10, this.posY - panelMaxH - 8);
-      }
-      return this.edge === "left"
-        ? { left: 0, top: top + "px" }
-        : { right: 0, top: top + "px" };
-    }
   },
   data() {
     return {
       isOpen: false,
-      guildIdInput: "",
       bindInput: "",
-      categorySelection: "",
-      // draggable toggle state
-      edge: "left", // snapped screen edge: "left" | "right"
-      posY: Math.round(window.innerHeight * 0.2),
-      dragging: false,
-      dragX: 0,
-      toggleWidth: 46,
-      toggleHeight: 46,
-      windowWidth: window.innerWidth,
-      windowHeight: window.innerHeight
     };
   },
   watch: {
@@ -213,46 +176,31 @@ export default {
     "kook.bound"(val) {
       if (val) this.isOpen = true;
     },
-    // keep the dropdown in sync with the server-confirmed category
-    "kook.categoryId"(val) {
-      this.categorySelection = val || "";
-    }
   },
   mounted() {
-    if (this.kook.lastGuildId) this.guildIdInput = this.kook.lastGuildId;
     if (this.kook.bound) this.isOpen = true;
-    this.categorySelection = this.kook.categoryId || "";
-    // restore the toggle position
-    try {
-      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
-      if (saved && (saved.edge === "left" || saved.edge === "right")) {
-        this.edge = saved.edge;
-        if (typeof saved.y === "number") this.posY = saved.y;
-      }
-    } catch (e) {
-      /* ignore broken stored position */
-    }
-    this.clampPosition();
-    window.addEventListener("resize", this.onResize);
-    this.$nextTick(() => {
-      if (this.$refs.toggle) {
-        this.toggleWidth = this.$refs.toggle.offsetWidth || 46;
-        this.toggleHeight = this.$refs.toggle.offsetHeight || 46;
-      }
-    });
+    window.addEventListener("keydown", this.onKeydown);
+    // capture phase: any pointerdown outside the panel/toggle closes it,
+    // regardless of click.stop handlers elsewhere in the page
+    document.addEventListener("pointerdown", this.onDocPointerDown, true);
   },
   beforeDestroy() {
-    window.removeEventListener("resize", this.onResize);
-    window.removeEventListener("pointermove", this.onPointerMove);
-    window.removeEventListener("pointerup", this.onPointerUp);
+    window.removeEventListener("keydown", this.onKeydown);
+    document.removeEventListener("pointerdown", this.onDocPointerDown, true);
   },
   methods: {
-    bindGuild() {
-      if (!this.guildIdInput) return;
-      this.$store.commit("kook/bind", this.guildIdInput);
+    togglePanel() {
+      this.isOpen = !this.isOpen;
     },
-    unbind() {
-      this.$store.commit("kook/unbind");
+    onKeydown(e) {
+      if (e.key === "Escape") this.isOpen = false;
+    },
+    onDocPointerDown(e) {
+      if (!this.isOpen) return;
+      const { panel, toggle } = this.$refs;
+      if (panel && panel.contains(e.target)) return;
+      if (toggle && toggle.contains(e.target)) return;
+      this.isOpen = false;
     },
     bindSelf() {
       if (!this.bindInput) return;
@@ -276,73 +224,15 @@ export default {
     muteAll(mute) {
       this.$store.commit("kook/mute", { mute, type: 1 });
     },
-    setCategory() {
-      this.$store.commit("kook/setLastCategoryId", this.categorySelection);
-      this.$store.commit("kook/setCategory", this.categorySelection);
-    },
     seatOf(kookId) {
       const playerId = Object.keys(this.kook.bindings).find(
-        pid => this.kook.bindings[pid] === kookId
+        (pid) => this.kook.bindings[pid] === kookId,
       );
       if (!playerId) return null;
-      const index = this.players.findIndex(p => p.id === playerId);
+      const index = this.players.findIndex((p) => p.id === playerId);
       return index >= 0 ? index + 1 : null;
     },
-    // --- drag & edge snap -------------------------------------------------
-    onPointerDown(e) {
-      e.preventDefault();
-      this.pressed = true;
-      this.dragging = false;
-      this._startX = e.clientX;
-      this._startY = e.clientY;
-      window.addEventListener("pointermove", this.onPointerMove);
-      window.addEventListener("pointerup", this.onPointerUp, { once: true });
-    },
-    onPointerMove(e) {
-      if (!this.pressed) return;
-      const dx = e.clientX - this._startX;
-      const dy = e.clientY - this._startY;
-      if (!this.dragging && Math.hypot(dx, dy) > 6) this.dragging = true;
-      if (this.dragging) {
-        this.dragX = Math.min(
-          Math.max(e.clientX - this.toggleWidth / 2, 0),
-          this.windowWidth - this.toggleWidth
-        );
-        this.posY = Math.min(
-          Math.max(e.clientY - 20, 10),
-          this.windowHeight - 60
-        );
-      }
-    },
-    onPointerUp(e) {
-      this.pressed = false;
-      window.removeEventListener("pointermove", this.onPointerMove);
-      if (this.dragging) {
-        // snap to the nearest screen edge and remember the position
-        this.edge = e.clientX < this.windowWidth / 2 ? "left" : "right";
-        this.dragging = false;
-        try {
-          localStorage.setItem(
-            STORAGE_KEY,
-            JSON.stringify({ edge: this.edge, y: this.posY })
-          );
-        } catch (err) {
-          /* storage full/denied: position just won't persist */
-        }
-      } else {
-        // plain click: toggle the panel
-        this.isOpen = !this.isOpen;
-      }
-    },
-    onResize() {
-      this.windowWidth = window.innerWidth;
-      this.windowHeight = window.innerHeight;
-      this.clampPosition();
-    },
-    clampPosition() {
-      this.posY = Math.min(Math.max(this.posY, 10), this.windowHeight - 60);
-    }
-  }
+  },
 };
 </script>
 
@@ -351,30 +241,29 @@ export default {
 
 .kook-toggle {
   position: fixed;
+  left: 0;
+  top: 20vh;
   z-index: 70;
-  cursor: grab;
-  background: rgba(0, 0, 0, 0.7);
-  border: 3px solid black;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 42px;
+  min-height: 42px;
+  background: rgba(20, 20, 30, 0.78);
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(255, 255, 255, 0.25);
   border-left: 0;
-  border-radius: 0 10px 10px 0;
-  padding: 10px 8px;
+  border-radius: 0 12px 12px 0;
+  box-shadow: 2px 2px 12px rgba(0, 0, 0, 0.5);
+  padding: 10px;
   color: white;
-  transition: left 0.25s ease, top 0.25s ease;
-  touch-action: none;
-  user-select: none;
-
-  &.dragging {
-    cursor: grabbing;
-    transition: none;
-  }
-
-  &.edge-right {
-    border: 3px solid black;
-    border-right: 0;
-    border-radius: 10px 0 0 10px;
-  }
+  transition:
+    transform 0.15s ease,
+    color 0.15s ease;
 
   &:hover {
+    transform: translateX(2px);
     color: $townsfolk;
   }
   &.active {
@@ -402,24 +291,21 @@ export default {
 
 .kook-voice-panel {
   position: fixed;
+  left: 48px;
+  top: calc(20vh + 54px);
   z-index: 65;
-  width: 260px;
+  width: 280px;
   max-height: 60vh;
   overflow-y: auto;
   overflow-x: hidden;
-  background: rgba(0, 0, 0, 0.85);
-  border: 3px solid black;
-  border-left: 0;
-  border-radius: 0 10px 10px 0;
+  background: rgba(15, 15, 25, 0.88);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 12px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
   padding: 10px 12px;
   color: white;
   font-size: 90%;
-
-  &.edge-right {
-    border: 3px solid black;
-    border-right: 0;
-    border-radius: 10px 0 0 10px;
-  }
 
   h3 {
     margin: 0 0 8px;
@@ -476,11 +362,6 @@ export default {
     flex-shrink: 1;
   }
 
-  .label {
-    opacity: 0.8;
-    font-size: 85%;
-  }
-
   .input {
     flex-grow: 1;
     min-width: 0;
@@ -489,10 +370,6 @@ export default {
     border: 1px solid rgba(255, 255, 255, 0.3);
     background: rgba(255, 255, 255, 0.1);
     color: white;
-  }
-
-  select.input option {
-    background: #111;
   }
 
   .warning-text {
@@ -530,6 +407,13 @@ export default {
     &.disabled {
       opacity: 0.4;
       cursor: not-allowed;
+    }
+    &.icon-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 26px;
+      padding: 3px 7px;
     }
   }
   .remove-btn {
@@ -627,39 +511,32 @@ export default {
 
 .kook-slide-enter-active,
 .kook-slide-leave-active {
-  transition: transform 0.2s ease, opacity 0.2s ease;
+  transition:
+    transform 0.2s ease,
+    opacity 0.2s ease;
 }
 .kook-slide-enter,
 .kook-slide-leave-to {
-  transform: translateX(-20px);
+  transform: translateX(-16px);
   opacity: 0;
-}
-.kook-slide-enter.edge-right,
-.kook-slide-leave-to.edge-right,
-.edge-right.kook-slide-enter,
-.edge-right.kook-slide-leave-to {
-  transform: translateX(20px);
 }
 
 // mobile: the panel becomes a bottom sheet with bigger touch targets
 @media (max-width: 768px) {
   .kook-toggle {
-    padding: 12px 10px;
+    min-width: 48px;
+    min-height: 48px;
     font-size: 110%;
   }
 
   .kook-voice-panel {
-    left: 0 !important;
-    right: 0 !important;
-    top: auto !important;
+    left: 0;
+    right: 0;
+    top: auto;
     bottom: 0;
     width: 100%;
     max-height: 45vh;
-    border-radius: 12px 12px 0 0 !important;
-    border: 3px solid black !important;
-    border-bottom: 0 !important;
-    padding: 12px 14px;
-    font-size: 100%;
+    border-radius: 12px 12px 0 0;
 
     .confirm-btn,
     .remove-btn {
@@ -672,10 +549,8 @@ export default {
   }
 
   .kook-slide-enter,
-  .kook-slide-leave-to,
-  .kook-slide-enter.edge-right,
-  .kook-slide-leave-to.edge-right {
-    transform: translateY(20px) !important;
+  .kook-slide-leave-to {
+    transform: translateY(20px);
   }
 }
 </style>

@@ -18,7 +18,6 @@ COPY dist server/dist
 
 ENV PORT=8080 \
     DIST_DIR=/app/server/dist \
-    DOMAIN=localhost \
     SCHEME=http
 
 EXPOSE 8080

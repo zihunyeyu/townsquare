@@ -127,6 +127,13 @@ class KookApi {
     return this.paged("/guild/user-list", { guild_id: guildId, search });
   }
 
+  /** Public profile of a user; guild_id adds the in-guild nickname. */
+  userView(userId, guildId) {
+    return this.call("GET", "/user/view", {
+      query: { user_id: userId, guild_id: guildId },
+    });
+  }
+
   guildMuteList(guildId) {
     return this.call("GET", "/guild-mute/list", {
       query: { guild_id: guildId, return_type: "detail" },

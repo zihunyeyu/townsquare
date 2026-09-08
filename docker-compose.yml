@@ -5,7 +5,7 @@ services:
     restart: unless-stopped
     environment:
       # 与前端 package.json 版本保持一致，避免客户端弹更新提示
-      APP_VERSION: 3.3.1
+      APP_VERSION: 3.3.2
       # HOST_GRACE_MS: 90000
     volumes:
       - avatars:/app/avatars
@@ -16,9 +16,10 @@ services:
     restart: unless-stopped
     environment:
       # 你的域名或服务器 IP（不带协议；非标准端口可带上，如 example.com:8080）
-      DOMAIN: localhost
+      # 留空则自动适配：前端会以访问页面所用的 host:port 连接后端
+      DOMAIN: "${DOMAIN:-}"
       # http 或 https；https 时前端自动改用 wss
-      SCHEME: http
+      SCHEME: "${SCHEME:-http}"
     ports:
       - "${HTTP_PORT:-8911}:80"
     depends_on:

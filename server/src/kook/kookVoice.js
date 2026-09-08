@@ -17,7 +17,14 @@
  */
 const EventEmitter = require("events");
 
-const RESYNC_INTERVAL_MS = 60 * 1000;
+const RESYNC_INTERVAL_MS = 5 * 1000;
+
+// KOOK sometimes returns plain-http asset URLs; pages served over https
+// would block them as mixed content, so always upgrade to https.
+const httpsUrl = (url) =>
+  typeof url === "string"
+    ? url.replace(/^http:\/\/(.*\.kookapp\.cn)/, "https://$1")
+    : url;
 
 class KookVoice extends EventEmitter {
   constructor(api, guildId) {
@@ -54,7 +61,7 @@ class KookVoice extends EventEmitter {
   async resync() {
     const view = await this.api.guildView(this.guildId);
     this.name = view.name || "";
-    this.icon = view.icon || "";
+    this.icon = httpsUrl(view.icon || "");
 
     // one unfiltered listing covers voice channels AND categories alike
     // (the type filter would exclude categories from the result)
@@ -84,6 +91,10 @@ class KookVoice extends EventEmitter {
     this.deafened = new Set(
       (mutes && mutes.headset && mutes.headset.user_ids) || []
     );
+    // a resync fixes drift that gateway events never cover (e.g. mute
+    // changes); without this push the corrected state only reached clients
+    // on their next page refresh
+    this.emit("change", this.snapshot());
   }
 
   // --- state accessors ---------------------------------------------------
@@ -164,7 +175,9 @@ class KookVoice extends EventEmitter {
         u.identify_num !== undefined
           ? u.identify_num
           : (existing && existing.identify_num) || "",
-      avatar: u.avatar !== undefined ? u.avatar : (existing && existing.avatar) || "",
+      avatar: httpsUrl(
+        u.avatar !== undefined ? u.avatar : (existing && existing.avatar) || "",
+      ),
       online: u.online !== undefined ? u.online : (existing ? existing.online : true),
     };
     const changed =
@@ -286,8 +299,21 @@ class KookVoice extends EventEmitter {
         avatar: "",
         online: true,
       });
+      // gateway events carry only the user id; fetch the profile right away
+      // so the name/avatar do not stay blank until the next full resync
+      this._fetchUser(userId);
     }
     return true;
+  }
+
+  /** Fill in a voice joiner's profile in the background (best effort). */
+  async _fetchUser(userId) {
+    try {
+      const u = await this.api.userView(userId, this.guildId);
+      if (this.upsertUser(u)) this.emit("change", this.snapshot());
+    } catch (err) {
+      // profile stays blank until the next resync; not fatal
+    }
   }
 
   _leave(userId, channelId) {

@@ -1,6 +1,6 @@
 {
   "name": "townsquare",
-  "version": "3.3.1",
+  "version": "3.3.2",
   "description": "Blood on the Clocktower Town Square",
   "author": "limpy01",
   "scripts": {
@@ -26,7 +26,7 @@
     "openssl": "^2.0.0",
     "path": "^0.12.7",
     "prom-client": "^13.0.0",
-    "sass": "^1.30.0",
+    "sass": "1.77.6",
     "sass-loader": "^8.0.2",
     "serve": "^14.2.3",
     "sharp": "^0.33.5",

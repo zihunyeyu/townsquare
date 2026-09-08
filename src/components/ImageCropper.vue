@@ -2,11 +2,11 @@
   <div>
     <div v-show="cropping" class="overlay">
       <div class="cropper-modal">
-        <input 
+        <input
           v-show="false"
-          type="file" 
-          ref="upload" 
-          accept="image/*" 
+          type="file"
+          ref="upload"
+          accept="image/*"
           @change="onFileChange"
         />
         <div v-if="image" class="canvas">
@@ -15,11 +15,21 @@
             <span>{{ warning }}</span>
           </div>
           <div>
-            <button @click="startCropping" :disabled="disabled.startCropping">裁剪</button>
-            <button @click="startMoving" :disabled="disabled.startMoving">移动</button>
-            <button @click="cropImage" :disabled="disabled.cropImage">预览</button>
-            <button @click="sendImage" :disabled="disabled.sendImage">确定</button>
-            <button @click="closeCropping" :disabled="disabled.closeCropping">关闭</button>
+            <button @click="startCropping" :disabled="disabled.startCropping">
+              裁剪
+            </button>
+            <button @click="startMoving" :disabled="disabled.startMoving">
+              移动
+            </button>
+            <button @click="cropImage" :disabled="disabled.cropImage">
+              预览
+            </button>
+            <button @click="sendImage" :disabled="disabled.sendImage">
+              确定
+            </button>
+            <button @click="closeCropping" :disabled="disabled.closeCropping">
+              关闭
+            </button>
           </div>
           <div v-if="croppedImage && preview">
             <img :src="croppedImage" alt="Cropped Image" />
@@ -30,11 +40,10 @@
   </div>
 </template>
 
-
 <script>
 import { mapState } from "vuex";
-import Cropper from 'cropperjs';
-import 'cropperjs/dist/cropper.css';
+import Cropper from "cropperjs";
+import "cropperjs/dist/cropper.css";
 import { AVATAR_UPLOAD_URL } from "../config";
 
 export default {
@@ -50,12 +59,12 @@ export default {
         startCropping: false,
         startMoving: false,
         cropImage: false,
-        sendImage: false
-      }
+        sendImage: false,
+      },
     };
   },
   computed: {
-    ...mapState(["session"])
+    ...mapState(["session"]),
   },
   methods: {
     async showInputModal({ inputType, inputModal, inputData }) {
@@ -94,17 +103,17 @@ export default {
       this.cropper = new Cropper(this.$refs.image, {
         aspectRatio: 1,
         viewMode: 1,
-        autoCrop: false, 
+        autoCrop: false,
         autoCropArea: 1,
-        dragMode: 'move',
-        rotatable: false
+        dragMode: "move",
+        rotatable: false,
       });
     },
     startCropping() {
-      this.cropper.setDragMode('crop');
+      this.cropper.setDragMode("crop");
     },
     startMoving() {
-      this.cropper.setDragMode('move');
+      this.cropper.setDragMode("move");
       this.cropper.clear();
     },
     cropImage() {
@@ -114,9 +123,9 @@ export default {
         width: 512,
         height: 512,
         imageSmoothingEnabled: true,
-        imageSmoothingQuality: 'high'
+        imageSmoothingQuality: "high",
       });
-      this.croppedImage = canvas.toDataURL('image/webp', 0.85);
+      this.croppedImage = canvas.toDataURL("image/webp", 0.85);
     },
     async sendImage() {
       this.preview = false;
@@ -128,24 +137,24 @@ export default {
         width: 512,
         height: 512,
         imageSmoothingEnabled: true,
-        imageSmoothingQuality: 'high'
+        imageSmoothingQuality: "high",
       });
-      this.croppedImage = canvas.toDataURL('image/webp', 0.85)
+      this.croppedImage = canvas.toDataURL("image/webp", 0.85);
       const maxBase64Length = 1 * 1024 * 1024 * (4 / 3);
       if (this.croppedImage.length > maxBase64Length) {
-        this.warning = "图片过大，请选择更小的图片进行上传！"
+        this.warning = "图片过大，请选择更小的图片进行上传！";
       } else {
         // this.$store.commit("session/setPlayerAvatar", this.croppedImage);
         try {
           const response = await fetch(AVATAR_UPLOAD_URL, {
-            method: 'POST',
+            method: "POST",
             headers: {
-              'Content-Type': 'application/json'
+              "Content-Type": "application/json",
             },
             body: JSON.stringify({
               playerId: this.session.playerId,
-              uploadContent: this.croppedImage
-            })
+              uploadContent: this.croppedImage,
+            }),
           });
           const result = await response.json();
           if (!response.ok || result.status !== "success") {
@@ -158,7 +167,7 @@ export default {
               inputModal: "text",
               inputData: {
                 name: ["头像上传成功！"],
-              }
+              },
             }).catch(() => {
               return null;
             });
@@ -173,13 +182,13 @@ export default {
     },
     closeCropping() {
       this.cropping = false;
-      this.$refs.upload.value = '';
+      this.$refs.upload.value = "";
       this.image = null;
       this.croppedImage = null;
       this.cropper = null;
       this.warning = "";
       this.preview = false;
-    }
+    },
   },
 };
 </script>
@@ -229,5 +238,3 @@ img {
   overflow-x: hidden;
 }
 </style>
-
-

@@ -11,14 +11,22 @@
  * harmless) when no bot token is configured.
  */
 const EventEmitter = require("events");
-const { KookApi } = require("./kookApi");
+const fs = require("fs");
+const path = require("path");
+const { KookApi, KookApiError } = require("./kookApi");
 const KookGateway = require("./kookGateway");
 const KookVoice = require("./kookVoice");
 const { KOOK_BOT_TOKEN, KOOK_API_BASE } = require("../config");
 
+// The token set from the web UI is persisted here; config.js reads the same
+// file at startup when KOOK_BOT_TOKEN is not in the environment.
+const DEFAULT_TOKEN_FILE = path.join(__dirname, "..", "..", "kook-token.txt");
+
 class KookService extends EventEmitter {
-  constructor({ token = KOOK_BOT_TOKEN, base = KOOK_API_BASE } = {}) {
+  constructor({ token = KOOK_BOT_TOKEN, base = KOOK_API_BASE, tokenFile = DEFAULT_TOKEN_FILE } = {}) {
     super();
+    this.base = base;
+    this.tokenFile = tokenFile;
     this.api = token ? new KookApi(token, base) : null;
     this.gateway = null;
     this.voices = new Map(); // guildId -> KookVoice
@@ -26,6 +34,52 @@ class KookService extends EventEmitter {
 
   enabled() {
     return !!this.api;
+  }
+
+  /**
+   * Set/replace the bot token at runtime (storyteller web UI). The token is
+   * validated against the KOOK API when it is reachable; state tied to the
+   * old token (gateway connection, voice caches) is torn down and the new
+   * token is persisted to kook-token.txt on a best-effort basis. An empty
+   * token disables the integration.
+   * @returns {Promise<{configured: boolean, verified: boolean}>}
+   */
+  async setToken(token) {
+    token = (token || "").trim();
+    let verified = false;
+    if (token) {
+      // /gateway/index is a cheap authenticated call with no side effects
+      const probe = new KookApi(token, this.base);
+      try {
+        await probe.getGateway();
+        verified = true;
+      } catch (err) {
+        // A KOOK business/HTTP error means the token itself was rejected;
+        // a plain network failure must not block saving (KOOK may just be
+        // unreachable from this host right now).
+        if (err instanceof KookApiError) throw err;
+      }
+    }
+    this._teardown();
+    this.api = token ? new KookApi(token, this.base) : null;
+    this._persistToken(token);
+    return { configured: !!this.api, verified };
+  }
+
+  _teardown() {
+    if (this.gateway) {
+      this.gateway.close();
+      this.gateway = null;
+    }
+    this.voices.clear();
+  }
+
+  _persistToken(token) {
+    try {
+      fs.writeFileSync(this.tokenFile, token ? token + "\n" : "", "utf8");
+    } catch (err) {
+      console.warn("[kook] 无法写入 kook-token.txt:", err.message);
+    }
   }
 
   /**
@@ -50,7 +104,19 @@ class KookService extends EventEmitter {
     if (this.gateway) return;
     this.gateway = new KookGateway(this.api);
     this.gateway.on("event", (d) => this._route(d));
-    this.gateway.on("ready", () => console.log("[kook] gateway connected"));
+    this.gateway.on("ready", () => {
+      console.log("[kook] gateway connected");
+      // events may have been missed while the gateway was down; reconcile
+      // every cached guild right away (resync pushes a fresh snapshot to
+      // the room) instead of waiting for the periodic resync
+      for (const voice of this.voices.values()) {
+        voice
+          .resync()
+          .catch((err) =>
+            console.error("[kook] resync after reconnect failed:", err.message)
+          );
+      }
+    });
     this.gateway.connect();
   }
 
@@ -67,7 +133,18 @@ class KookService extends EventEmitter {
       extra.guild_id ||
       body.guild_id ||
       (d.channel_type === "GROUP" ? d.target_id : null);
-    if (guildId && this.voices.has(guildId)) {
+    let voice = guildId ? this.voices.get(guildId) : null;
+    if (!voice && body.channel_id) {
+      // fallback: some event shapes do not resolve to a guild id at all;
+      // find the voice cache holding the affected channel instead
+      for (const v of this.voices.values()) {
+        if (v.channels.has(String(body.channel_id))) {
+          voice = v;
+          break;
+        }
+      }
+    }
+    if (voice) {
       if (
         [
           "joined_channel",
@@ -79,7 +156,7 @@ class KookService extends EventEmitter {
       ) {
         console.log(`[kook] event ${extra.type}`, JSON.stringify(body).slice(0, 120));
       }
-      this.voices.get(guildId).handleEvent(d);
+      voice.handleEvent(d);
       return;
     }
     // member online/offline events carry a list of shared guilds

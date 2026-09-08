@@ -2,7 +2,7 @@ const state = () => ({
   ping: 0,
   rooms: null,
   isReconnecting: false,
-  allowReconnect: true
+  allowReconnect: true,
 });
 
 const getters = {};
@@ -10,14 +10,14 @@ const getters = {};
 const actions = {};
 
 // mutations helper functions
-const set = key => (state, val) => {
+const set = (key) => (state, val) => {
   state[key] = val;
 };
 
 const mutations = {
   setPing: set("ping"),
   setReconnecting: set("isReconnecting"),
-  setAllowConnect: set("allowReconnect")
+  setAllowConnect: set("allowReconnect"),
 };
 
 export default {
@@ -25,5 +25,5 @@ export default {
   state,
   getters,
   actions,
-  mutations
+  mutations,
 };

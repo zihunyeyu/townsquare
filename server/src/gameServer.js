@@ -293,6 +293,8 @@ class GameServer {
         send(sender, "feedback", feedbackId);
         break;
       }
+      case "dissolveRoom":
+        return this._dissolveRoom(room, ws);
       // --- KOOK voice integration ---------------------------------------
       case "kookBind":
         return this._kookBind(room, ws, reqParams);
@@ -310,6 +312,8 @@ class GameServer {
         return this._kookMute(room, ws, reqParams);
       case "kookSetCategory":
         return this._kookSetCategory(room, ws, reqParams);
+      case "kookSetToken":
+        return this._kookSetToken(room, ws, reqParams);
       case "kookSync":
         return this._pushKookState(ws, room);
       default:
@@ -430,6 +434,7 @@ class GameServer {
     if (!this.kook || !this.kook.enabled()) {
       return send(ws, "kookError", {
         op: "bind",
+        code: "NO_TOKEN",
         message: "后端未配置 KOOK_BOT_TOKEN",
       });
     }
@@ -471,6 +476,12 @@ class GameServer {
     }
   }
 
+  /** request/dissolveRoom - the active storyteller dissolves the room. */
+  _dissolveRoom(room, ws) {
+    if (!ws.meta.isHost || room.host !== ws) return;
+    this.roomManager.dissolve(room);
+  }
+
   /** request/kookUnbind - remove the room's KOOK binding. */
   _kookUnbind(room, ws) {
     if (!ws.meta.isHost) {
@@ -481,6 +492,35 @@ class GameServer {
     room.kookCategoryId = null;
     room.kookBindings.clear();
     this._broadcastRoom(room, ["kookBound", null]);
+  }
+
+  /**
+   * request/kookSetToken: { token } - set/replace the server-wide KOOK bot
+   * token from the web UI (host only). The token never leaves the backend:
+   * the ack only reports whether a token is configured and whether it could
+   * be verified against the KOOK API. An empty token disables the
+   * integration.
+   */
+  async _kookSetToken(room, ws, params) {
+    if (!ws.meta.isHost) {
+      return send(ws, "kookError", {
+        op: "setToken",
+        message: "仅说书人可以设置机器人 Token",
+      });
+    }
+    const token = String((params && params.token) || "").trim();
+    if (token.length > 128) {
+      return send(ws, "kookError", { op: "setToken", message: "Token 长度异常" });
+    }
+    try {
+      const result = await this.kook.setToken(token);
+      send(ws, "kookTokenSet", result);
+    } catch (err) {
+      send(ws, "kookError", {
+        op: "setToken",
+        message: `Token 校验失败:${err.message}`,
+      });
+    }
   }
 
   /**

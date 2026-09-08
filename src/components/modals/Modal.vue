@@ -34,16 +34,16 @@ export default {
   props: {
     name: {
       type: String,
-      default: ""
+      default: "",
     },
     type: {
       type: String,
-      default: ""
-    }
+      default: "",
+    },
   },
-  data: function() {
+  data: function () {
     return {
-      isMaximized: false
+      isMaximized: false,
     };
   },
   methods: {
@@ -54,26 +54,25 @@ export default {
       // 输入时点击背景不关闭
       if (this.name === "input" && this.type === "input") return;
       this.close();
-    }
-  }
+    },
+  },
 };
 </script>
 
 <style lang="scss">
-
 /* width */
 ::-webkit-scrollbar {
   width: 5px;
 }
 /* Handle */
 ::-webkit-scrollbar-thumb {
-  background: rgb(54, 54, 54); 
+  background: rgb(54, 54, 54);
   border-radius: 10px;
 }
 
 /* Handle on hover */
 ::-webkit-scrollbar-thumb:hover {
-  background: rgb(97, 97, 97); 
+  background: rgb(97, 97, 97);
 }
 
 .modal-backdrop {
@@ -149,8 +148,6 @@ export default {
     position: initial;
   }
 }
-
-
 
 .maximized {
   background: rgba(0, 0, 0, 0.95);

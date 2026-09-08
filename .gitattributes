@@ -1,2 +1,4 @@
 # 容器内执行的脚本必须用 LF，避免 Windows 检出时被转成 CRLF
 *.sh text eol=lf
+# Windows 批处理必须用 CRLF，否则 goto 标签与括号块会解析失败
+*.bat text eol=crlf

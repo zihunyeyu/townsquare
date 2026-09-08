@@ -8,7 +8,7 @@
 ## 一体化单镜像（推荐）
 
 ```bash
-# 直接使用阿里云镜像仓库的成品镜像（编辑 DOMAIN / SCHEME 后）：
+# 直接使用阿里云镜像仓库的成品镜像（DOMAIN 可留空自动适配；需要 https 时设置 SCHEME）：
 docker compose -f docker-compose.standalone.yml pull
 docker compose -f docker-compose.standalone.yml up -d
 ```
@@ -62,7 +62,7 @@ docker compose up -d --build
 
 | 变量 | 默认 | 说明 |
 |---|---|---|
-| `DOMAIN` | `localhost:8911` | 对外域名/IP，非标准端口时可带端口（如 `example.com:8911`） |
+| `DOMAIN` | 空（自动适配） | 对外域名/IP，非标准端口时可带端口（如 `example.com:8911`）；**留空时前端自动以访问页面所用的 host:port 连接后端**，局域网/公网 IP:端口 直达无需配置 |
 | `SCHEME` | `http` | `https` 时前端自动使用 `wss://` |
 | `WS_URL` / `LOBBY_URL` / `API_URL` / `AVATAR_URL` | 按 DOMAIN/SCHEME 推导 | 需要自定义路径时单独覆盖 |
 | `KOOK_BOT_TOKEN` | 空 | 可选，KOOK 语音频道集成的机器人 token（仅存于服务端） |
@@ -84,7 +84,7 @@ WSS 要求页面与 WebSocket 同为 TLS。两种方式任选：
 
 ```bash
 curl http://<DOMAIN>/healthz         # 未提供；用下行代替
-curl http://<DOMAIN>/dynamic/init    # {"payload":{"version":"3.3.1",...}}
+curl http://<DOMAIN>/dynamic/init    # {"payload":{"version":"3.3.2",...}}
 curl http://<DOMAIN>/env.js          # window.__ENV 运行时配置
 ```
 
