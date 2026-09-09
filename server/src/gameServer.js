@@ -312,6 +312,10 @@ class GameServer {
         return this._kookMute(room, ws, reqParams);
       case "kookSetCategory":
         return this._kookSetCategory(room, ws, reqParams);
+      case "kookSetMainChannel":
+        return this._kookSetMainChannel(room, ws, reqParams);
+      case "kookInvite":
+        return this._kookInvite(room, ws, reqParams);
       case "kookSetToken":
         return this._kookSetToken(room, ws, reqParams);
       case "kookSync":
@@ -399,6 +403,7 @@ class GameServer {
       guildName: voice.name,
       guildIcon: voice.icon,
       categoryId: room.kookCategoryId,
+      mainChannelId: room.kookMainChannelId,
     });
     send(ws, "kookBindings", Object.fromEntries(room.kookBindings));
     // remind the client of its own binding (e.g. after a page refresh)
@@ -447,12 +452,15 @@ class GameServer {
       this._detachKook(room.id);
       room.kookGuildId = guildId;
       room.kookCategoryId = null;
+      room.kookMainChannelId = null;
+      room.kookAutoMoved.clear();
       const listener = () => {
         if (voice.ready) {
           this._broadcastRoom(room, [
             "kookVoice",
             voice.snapshot(room.kookCategoryId),
           ]);
+          this._kookAutoPull(room, voice);
         }
       };
       voice.on("change", listener);
@@ -464,6 +472,7 @@ class GameServer {
           guildName: voice.name,
           guildIcon: voice.icon,
           categoryId: null,
+          mainChannelId: null,
         },
       ]);
       this._broadcastRoom(room, [
@@ -490,6 +499,8 @@ class GameServer {
     this._detachKook(room.id);
     room.kookGuildId = null;
     room.kookCategoryId = null;
+    room.kookMainChannelId = null;
+    room.kookAutoMoved.clear();
     room.kookBindings.clear();
     this._broadcastRoom(room, ["kookBound", null]);
   }
@@ -553,6 +564,14 @@ class GameServer {
       }
     }
     room.kookCategoryId = categoryId;
+    // the main channel belongs to the category; drop it when the category
+    // is lifted or changed to one the main channel is not part of
+    if (room.kookMainChannelId) {
+      const main = voice.channels.get(room.kookMainChannelId);
+      if (!categoryId || !main || main.parentId !== categoryId) {
+        room.kookMainChannelId = null;
+      }
+    }
     this._broadcastRoom(room, [
       "kookBound",
       {
@@ -560,10 +579,171 @@ class GameServer {
         guildName: voice.name,
         guildIcon: voice.icon,
         categoryId,
+        mainChannelId: room.kookMainChannelId,
       },
     ]);
     if (voice.ready) {
       this._broadcastRoom(room, ["kookVoice", voice.snapshot(categoryId)]);
+    }
+  }
+
+  /**
+   * request/kookSetMainChannel: { channelId } - designate the main voice
+   * channel of the selected category (host). Newly bound players entering a
+   * voice channel of the category are auto-pulled into it. Empty/null clears
+   * the designation.
+   */
+  _kookSetMainChannel(room, ws, params) {
+    if (!ws.meta.isHost) {
+      return send(ws, "kookError", {
+        op: "setMainChannel",
+        message: "仅说书人可以设置主频道",
+      });
+    }
+    const voice = this._kookVoiceOf(room);
+    if (!voice) {
+      return send(ws, "kookError", {
+        op: "setMainChannel",
+        message: "房间尚未绑定 KOOK 服务器",
+      });
+    }
+    if (!room.kookCategoryId) {
+      return send(ws, "kookError", {
+        op: "setMainChannel",
+        message: "请先选择频道分组",
+      });
+    }
+    const channelId = String((params && params.channelId) || "") || null;
+    if (channelId) {
+      const channel = voice.channels.get(channelId);
+      if (!channel || channel.isCategory) {
+        return send(ws, "kookError", {
+          op: "setMainChannel",
+          message: "目标语音频道不存在",
+        });
+      }
+      if (channel.parentId !== room.kookCategoryId) {
+        return send(ws, "kookError", {
+          op: "setMainChannel",
+          message: "主频道必须属于所选分组",
+        });
+      }
+    }
+    room.kookMainChannelId = channelId;
+    this._broadcastRoom(room, [
+      "kookBound",
+      {
+        guildId: room.kookGuildId,
+        guildName: voice.name,
+        guildIcon: voice.icon,
+        categoryId: room.kookCategoryId,
+        mainChannelId: channelId,
+      },
+    ]);
+    // pull bound users who are already inside the category but never got
+    // pulled (e.g. they joined a sub-channel before the main channel existed)
+    if (channelId) this._kookAutoPull(room, voice);
+  }
+
+  /**
+   * Pull every bound user who enters a voice channel of the selected
+   * category into the main channel - once per binding (the first entry).
+   */
+  _kookAutoPull(room, voice) {
+    if (!room.kookMainChannelId || !room.kookCategoryId) return;
+    for (const kookId of new Set(room.kookBindings.values())) {
+      if (room.kookAutoMoved.has(kookId)) continue;
+      const cid = voice.channelOfUser(kookId);
+      if (!cid) continue; // not in any voice channel yet
+      const channel = voice.channels.get(cid);
+      if (!channel || channel.parentId !== room.kookCategoryId) continue;
+      room.kookAutoMoved.add(kookId);
+      if (cid === room.kookMainChannelId) continue; // already in the main channel
+      this.kook.api
+        .moveUsers(room.kookMainChannelId, [kookId])
+        .then(() => voice.moveLocal(kookId, room.kookMainChannelId))
+        .catch((err) =>
+          console.error("[kook] auto-pull to main channel failed:", err.message)
+        );
+    }
+  }
+
+  /**
+   * request/kookInvite: { channelId, playerIds } - invite players who are
+   * currently in the main channel to another channel of the category. Every
+   * invitee receives a "kookInvite" message naming the inviter, the channel
+   * and all fellow invitees; accepting simply moves the invitee there.
+   */
+  _kookInvite(room, ws, params) {
+    const voice = this._kookVoiceOf(room);
+    if (!voice) {
+      return send(ws, "kookError", {
+        op: "invite",
+        message: "房间尚未绑定 KOOK 服务器",
+      });
+    }
+    const fromKookId = room.kookBindings.get(ws.meta.playerId);
+    if (!fromKookId) {
+      return send(ws, "kookError", {
+        op: "invite",
+        message: "请先绑定你的 KOOK 账号",
+      });
+    }
+    if (!room.kookMainChannelId) {
+      return send(ws, "kookError", {
+        op: "invite",
+        message: "说书人尚未设置主频道",
+      });
+    }
+    const channelId = String((params && params.channelId) || "");
+    const channel = voice.channels.get(channelId);
+    if (!channel || channel.isCategory) {
+      return send(ws, "kookError", { op: "invite", message: "目标语音频道不存在" });
+    }
+    if (room.kookCategoryId && channel.parentId !== room.kookCategoryId) {
+      return send(ws, "kookError", {
+        op: "invite",
+        message: "该频道不在本局分组内",
+      });
+    }
+    const targetIds = Array.isArray(params && params.playerIds)
+      ? [...new Set(params.playerIds.map(String))].slice(0, 20)
+      : [];
+    // only bound players currently inside the main channel can be invited
+    const targets = [];
+    for (const pid of targetIds) {
+      if (pid === ws.meta.playerId) continue;
+      const kookId = room.kookBindings.get(pid);
+      if (!kookId || voice.channelOfUser(kookId) !== room.kookMainChannelId) {
+        continue;
+      }
+      const targetWs =
+        pid === room.hostPlayerId ? room.host : room.players.get(pid);
+      if (targetWs && targetWs.readyState === 1) targets.push({ pid, kookId });
+    }
+    if (!targets.length) {
+      return send(ws, "kookError", {
+        op: "invite",
+        message: "主频道中没有可邀请的玩家",
+      });
+    }
+    const fromUser = voice.users.get(fromKookId) || {};
+    const payload = {
+      channelId,
+      channelName: channel.name,
+      from: {
+        name: fromUser.nickname || fromUser.username || fromKookId,
+        avatar: fromUser.avatar || "",
+      },
+      invitees: targets.map((t) => {
+        const u = voice.users.get(t.kookId) || {};
+        return u.nickname || u.username || t.kookId;
+      }),
+    };
+    for (const t of targets) {
+      const targetWs =
+        t.pid === room.hostPlayerId ? room.host : room.players.get(t.pid);
+      send(targetWs, "kookInvite", payload);
     }
   }
 
@@ -609,6 +789,9 @@ class GameServer {
       "kookBindings",
       Object.fromEntries(room.kookBindings),
     ]);
+    // a freshly bound user already inside the category is pulled to the
+    // main channel right away instead of waiting for a voice event
+    this._kookAutoPull(room, voice);
     send(ws, "kookBoundUser", {
       id: found.id,
       username: found.username,
@@ -620,12 +803,14 @@ class GameServer {
 
   /** request/kookUnbindUser - remove the sender's own KOOK binding. */
   _kookUnbindUser(room, ws) {
+    const kookId = room.kookBindings.get(ws.meta.playerId);
     if (!room.kookBindings.delete(ws.meta.playerId)) {
       return send(ws, "kookError", {
         op: "unbindUser",
         message: "你尚未绑定 KOOK 账号",
       });
     }
+    room.kookAutoMoved.delete(kookId);
     this._broadcastRoom(room, [
       "kookBindings",
       Object.fromEntries(room.kookBindings),
@@ -783,7 +968,9 @@ class GameServer {
           send(room.host, "bye", ws.meta.playerId);
         }
         // drop the KOOK binding of a player who really left the room
+        const leftKookId = room.kookBindings.get(ws.meta.playerId);
         if (room.kookBindings.delete(ws.meta.playerId)) {
+          room.kookAutoMoved.delete(leftKookId);
           this._broadcastRoom(room, [
             "kookBindings",
             Object.fromEntries(room.kookBindings),

@@ -250,8 +250,9 @@ export default {
   },
   computed: {
     ...mapGetters({ nightOrder: "players/nightOrder" }),
-    ...mapState(["grimoire", "roles", "session"]),
+    ...mapState(["grimoire", "roles", "session", "kook"]),
     ...mapState("players", ["players", "bluffs", "fabled"]),
+    ...mapGetters("kook", ["isSelfInCategoryVoice"]),
     ...mapState(["floatingNotice"]),
     orientation: function () {
       const ratio = this.windowWidth / this.windowHeight;
@@ -428,11 +429,42 @@ export default {
       this.windowWidth = window.innerWidth;
       this.windowHeight = window.innerHeight;
     },
+    async showAlert(text) {
+      return new Promise((resolve, reject) => {
+        this.$store.commit("session/setInputResolver", resolve);
+        this.$store.commit("session/setInputRejecter", reject);
+
+        this.$store.commit("session/setInputType", "alert");
+        this.$store.commit("session/setInputModal", "text");
+        this.$store.commit("session/setInputData", { name: [text] });
+
+        this.$store.commit("toggleModal", "input");
+      }).catch(() => {
+        return null;
+      });
+    },
     claimSeat(playerIndex) {
       if (!this.session.isSpectator) return;
       if (this.session.playerId === this.players[playerIndex].id) {
         this.$store.commit("session/claimSeat", -1);
       } else {
+        // KOOK gate: claiming a seat requires a bound KOOK account inside a
+        // (category-restricted) voice channel; the host re-checks this
+        if (!this.kook.selfKookId) {
+          this.showAlert("请先绑定 KOOK 账号后再入座");
+          return;
+        }
+        if (!this.isSelfInCategoryVoice) {
+          const category = this.kook.channels.find(
+            (c) => c.id === this.kook.categoryId,
+          );
+          this.showAlert(
+            category
+              ? `请先进入 KOOK「${category.name}」分组内的语音频道后再入座`
+              : "请先进入 KOOK 语音频道后再入座",
+          );
+          return;
+        }
         this.$store.commit("session/claimSeat", playerIndex);
         this.$store.commit("session/createChatHistory", this.session.stId);
       }

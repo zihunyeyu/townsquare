@@ -298,10 +298,7 @@
                 发送魔典
                 <em><font-awesome-icon icon="book" /></em>
               </li>
-              <li
-                v-if="!session.isSpectator"
-                @click="toggleModal('kookSettings')"
-              >
+              <li @click="toggleModal('kookSettings')">
                 KOOK 设置
                 <em><font-awesome-icon icon="volume-up" /></em>
               </li>
@@ -731,9 +728,6 @@ export default {
       this.$store.commit("session/setPlayerName", newName);
     },
     async hostSession() {
-      if (!this.session.playerName) await this.changeName();
-      if (!this.session.playerName) return;
-
       if (this.session.sessionId) return;
       if (this.lobby.rooms === null) {
         await this.showInputModal({
@@ -1023,8 +1017,6 @@ export default {
     },
     async joinSession() {
       if (this.session.sessionId) return this.leaveSession();
-      if (!this.session.playerName) await this.changeName();
-      if (!this.session.playerName) return;
 
       if (this.lobby.rooms === null) {
         await this.showInputModal({

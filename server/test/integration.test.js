@@ -403,6 +403,7 @@ function makeFakeKook() {
       ]);
       this.users = new Map([
         ["kook1", { id: "kook1", username: "玩家一", nickname: "小三" }],
+        ["kook2", { id: "kook2", username: "玩家二", nickname: "二丫" }],
       ]);
       this.occupancy = new Map([["vc1", new Set(["kook1"])], ["vc2", new Set()]]);
       this.muted = new Set();
@@ -467,7 +468,11 @@ function makeFakeKook() {
     },
     api: {
       async guildUserList(guildId, search) {
-        return [{ id: "kook1", username: search, nickname: "小三", identify_num: "1234" }];
+        const byName = {
+          玩家一: { id: "kook1", username: "玩家一", nickname: "小三", identify_num: "1234" },
+          玩家二: { id: "kook2", username: "玩家二", nickname: "二丫", identify_num: "5678" },
+        };
+        return byName[search] ? [byName[search]] : [];
       },
       async moveUsers(cid, ids) {
         calls.moveUsers.push([cid, ids]);
@@ -722,10 +727,146 @@ test("room: dissolveRoom kicks players and destroys the room", async () => {
   host2.close();
 });
 
+test("kook: main channel designation and auto-pull on first entry", async () => {
+  const host = await connect(`${GAME_URL}/9030/hostM/host?auth=secret30`);
+  send(host, "request", { checkAllowHost: ["hostM", null] });
+  await nextMessage(host, ([c]) => c === "allowHost", "allowHost");
+  send(host, "request", { kookBind: ["hostM", { guildId: "g1" }] });
+  await nextMessage(host, ([c]) => c === "kookBound", "kookBound");
+  send(host, "request", { kookSetCategory: ["hostM", { categoryId: "cat1" }] });
+  await nextMessage(
+    host,
+    ([c, p]) => c === "kookBound" && p.categoryId === "cat1",
+    "kookBound with categoryId"
+  );
+
+  // the main channel is host-only and must belong to the category
+  const player = await connect(`${GAME_URL}/9030/p30`);
+  await nextMessage(player, ([c]) => c === "kookBound", "kookBound on join");
+  const errNotHost = nextMessage(
+    player,
+    ([c, p]) => c === "kookError" && p.op === "setMainChannel",
+    "kookError setMainChannel not host"
+  );
+  send(player, "request", { kookSetMainChannel: ["p30", { channelId: "vc1" }] });
+  await errNotHost;
+  const errOutside = nextMessage(
+    host,
+    ([c, p]) => c === "kookError" && p.op === "setMainChannel",
+    "kookError setMainChannel outside category"
+  );
+  send(host, "request", { kookSetMainChannel: ["hostM", { channelId: "vc9" }] });
+  await errOutside;
+
+  // host designates vc2 as the main channel of 测试分组
+  const mainSet = nextMessage(
+    host,
+    ([c, p]) => c === "kookBound" && p.mainChannelId === "vc2",
+    "kookBound with mainChannelId"
+  );
+  send(host, "request", { kookSetMainChannel: ["hostM", { channelId: "vc2" }] });
+  await mainSet;
+
+  // the player binds; kook1 sits in vc1 (inside the category, not the main
+  // channel) and must be auto-pulled to vc2 exactly once
+  const movesBefore = fakeKook.calls.moveUsers.length;
+  const pulled = nextMessage(
+    player,
+    ([c, p]) => c === "kookVoice" && (p.occupancy.vc2 || []).includes("kook1"),
+    "kookVoice after auto-pull"
+  );
+  send(player, "request", { kookBindUser: ["p30", { query: "玩家一#1234" }] });
+  await pulled;
+  assert.deepStrictEqual(fakeKook.calls.moveUsers.slice(movesBefore), [
+    ["vc2", ["kook1"]],
+  ]);
+
+  // a later voice change must not re-pull the same binding
+  fakeKook._voice.moveLocal("kook1", "vc1");
+  await sleep(200);
+  assert.strictEqual(fakeKook.calls.moveUsers.length, movesBefore + 1);
+
+  host.close();
+  player.close();
+});
+
+test("kook: invite players from the main channel to another channel", async () => {
+  // kook1 is in vc2 after the previous test; kook2 joins it there
+  fakeKook._voice.moveLocal("kook2", "vc2");
+  const host = await connect(`${GAME_URL}/9031/hostI/host?auth=secret31`);
+  send(host, "request", { checkAllowHost: ["hostI", null] });
+  await nextMessage(host, ([c]) => c === "allowHost", "allowHost");
+  send(host, "request", { kookBind: ["hostI", { guildId: "g1" }] });
+  await nextMessage(host, ([c]) => c === "kookBound", "kookBound");
+  send(host, "request", { kookSetCategory: ["hostI", { categoryId: "cat1" }] });
+  await nextMessage(
+    host,
+    ([c, p]) => c === "kookBound" && p.categoryId === "cat1",
+    "kookBound with categoryId"
+  );
+  // vc2 is the main channel; both users are already inside it
+  send(host, "request", { kookSetMainChannel: ["hostI", { channelId: "vc2" }] });
+  await nextMessage(
+    host,
+    ([c, p]) => c === "kookBound" && p.mainChannelId === "vc2",
+    "kookBound with mainChannelId"
+  );
+
+  const inviter = await connect(`${GAME_URL}/9031/p31`);
+  const invitee = await connect(`${GAME_URL}/9031/p32`);
+  send(inviter, "request", { kookBindUser: ["p31", { query: "玩家一#1234" }] });
+  await nextMessage(inviter, ([c]) => c === "kookBoundUser", "inviter bound");
+  send(invitee, "request", { kookBindUser: ["p32", { query: "玩家二#5678" }] });
+  await nextMessage(invitee, ([c]) => c === "kookBoundUser", "invitee bound");
+
+  // inviting to a channel outside the category is rejected
+  const errOutside = nextMessage(
+    inviter,
+    ([c, p]) => c === "kookError" && p.op === "invite",
+    "kookError invite outside category"
+  );
+  send(inviter, "request", {
+    kookInvite: ["p31", { channelId: "vc9", playerIds: ["p32"] }],
+  });
+  await errOutside;
+
+  // the invitee gets the invite naming the inviter, the channel and all
+  // fellow invitees
+  const invited = nextMessage(
+    invitee,
+    ([c, p]) =>
+      c === "kookInvite" &&
+      p.channelId === "vc1" &&
+      p.channelName === "主房间" &&
+      p.from.name === "小三" &&
+      p.invitees.includes("二丫"),
+    "kookInvite"
+  );
+  send(inviter, "request", {
+    kookInvite: ["p31", { channelId: "vc1", playerIds: ["p32"] }],
+  });
+  await invited;
+
+  // accepting moves the invitee: the plain kookMove command does it
+  const moved = nextMessage(
+    invitee,
+    ([c, p]) => c === "kookVoice" && (p.occupancy.vc1 || []).includes("kook2"),
+    "kookVoice after accept"
+  );
+  send(invitee, "request", { kookMove: ["p32", { channelId: "vc1" }] });
+  await moved;
+
+  host.close();
+  inviter.close();
+  invitee.close();
+});
+
 // ------------------------------------------------------------------ runner
+// module-level so tests can inspect the fake voice state / recorded calls
+const fakeKook = makeFakeKook();
 (async () => {
   const roomManager = new RoomManager();
-  const game = new GameServer(roomManager, makeFakeKook()).start(GAME_PORT);
+  const game = new GameServer(roomManager, fakeKook).start(GAME_PORT);
   const lobby = new LobbyServer(roomManager).start(LOBBY_PORT);
   const api = new HttpApi().start(API_PORT);
   await sleep(300);

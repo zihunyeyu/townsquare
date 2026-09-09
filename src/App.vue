@@ -41,7 +41,9 @@
     <InputModal ref="input" />
     <GroupChatModal />
     <KookSettingsModal />
+    <KookJoinModal />
     <KookVoicePanel />
+    <KookInviteToast />
     <VersionModal />
     <Gradients />
     <!-- <span id="version">v{{ version }}</span> -->
@@ -69,7 +71,9 @@ import GameStateModal from "@/components/modals/GameStateModal";
 import InputModal from "@/components/modals/InputModal.vue";
 import GroupChatModal from "./components/modals/GroupChatModal.vue";
 import KookSettingsModal from "./components/modals/KookSettingsModal.vue";
+import KookJoinModal from "./components/modals/KookJoinModal.vue";
 import KookVoicePanel from "./components/KookVoicePanel.vue";
+import KookInviteToast from "./components/KookInviteToast.vue";
 import VersionModal from "./components/modals/VersionModal.vue";
 
 export default {
@@ -91,7 +95,9 @@ export default {
     InputModal,
     GroupChatModal,
     KookSettingsModal,
+    KookJoinModal,
     KookVoicePanel,
+    KookInviteToast,
     VersionModal,
     Gradients,
   },
@@ -112,37 +118,11 @@ export default {
       this.$store.dispatch("fetchInit");
 
       if (sessionId && this.session.sessionId === "") {
-        // Set initial session state
+        // Set initial session state; the nickname is filled in later by the
+        // KOOK account binding
         this.$store.commit("session/setSpectator", true);
         this.$store.commit("toggleGrimoire", false);
-
-        let finalName = this.session.playerName; // Get existing name if any
-
-        if (!finalName) {
-          const input = await this.showInputModal({
-            inputType: "changeName",
-            inputModal: "input",
-            inputData: {
-              name: ["输入玩家昵称"],
-              length: 1,
-              placeholder: [""],
-            },
-          }).catch(() => {
-            return null;
-          });
-          if (input === null) return;
-
-          finalName = input[0];
-        }
-
-        // Now handle the result
-        if (finalName) {
-          this.$store.commit("session/setPlayerName", finalName);
-          this.$store.commit("session/setSessionId", sessionId);
-        } else {
-          // User cancelled input, so don't join the session
-          this.$store.commit("session/setSessionId", "");
-        }
+        this.$store.commit("session/setSessionId", sessionId);
       } else if (
         pathname === "/" &&
         sessionId &&

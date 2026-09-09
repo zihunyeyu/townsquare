@@ -87,6 +87,8 @@ ws://{host}:{port}/{playerId}
 | `kookMoveAll` | 全员移到指定语音频道（仅 host），`params = { channelId }` | 广播 `kookVoice` |
 | `kookMute` | 服务器级闭麦/解除（仅 host），`params = { userIds?, mute?, type? }`（type 1=麦克风 2=耳机） | 广播 `kookVoice` |
 | `kookSetCategory` | 限定本局使用的语音频道分组（仅 host），`params = { categoryId }`，空值解除 | 广播 `kookBound` + `kookVoice`（按分组过滤） |
+| `kookSetMainChannel` | 指定分组内的主语音频道（仅 host，需先设置分组），`params = { channelId }`，空值取消 | 广播 `kookBound`（含 `mainChannelId`） |
+| `kookInvite` | 邀请主频道内的玩家到指定语音频道，`params = { channelId, playerIds }`（需已绑定 KOOK 账号） | 向每位被邀请人发送 `kookInvite`；失败回 `kookError` |
 | `kookSetToken` | 设置/修改服务器级 KOOK 机器人 Token（仅 host），`params = { token }`，空值停用；保存时尽量联机校验并写入 `server/kook-token.txt` 持久化 | 向本人回 `kookTokenSet`（不含 token）；失败回 `kookError` |
 | `kookSync` | 请求重发当前 KOOK 状态 | `kookBound` + `kookBindings` + `kookVoice` |
 
@@ -224,10 +226,11 @@ KOOK 指令的失败一律以 `["kookError", { op, message }]` 回复请求方�
 
 | command | params | 时机 |
 |---|---|---|
-| `kookBound` | `{ guildId, guildName, guildIcon, categoryId }` 或 `null` | 绑定/解绑/改分组时广播；新连接加入已绑定房间时单独补发 |
+| `kookBound` | `{ guildId, guildName, guildIcon, categoryId, mainChannelId }` 或 `null` | 绑定/解绑/改分组/改主频道时广播；新连接加入已绑定房间时单独补发 |
 | `kookBindings` | `{ playerId: kookUserId, ... }` | 绑定/解绑用户、玩家真正离开时广播 |
 | `kookVoice` | 语音状态快照 `{ guildId, name, ready, channels, users, occupancy, muted, deafened }` | 状态变化时全房间广播（全量快照，无量级问题） |
 | `kookBoundUser` | `{ id, username, nickname, avatar, identify_num }` | 本人 `kookBindUser` 成功后回执；重连时若绑定仍在会补发 |
+| `kookInvite` | `{ channelId, channelName, from: { name, avatar }, invitees: [名字...] }` | 收到频道邀请（接受邀请即对自己执行 `kookMove` 到该频道） |
 | `kookTokenSet` | `{ configured, verified }` | 本人 `kookSetToken` 成功回执（永不包含 token）；`verified` 表示已通过 KOOK API 联机校验 |
 | `kookError` | `{ op, message, code? }` | 任一 `kook*` 指令失败时回复请求方；`code` 目前仅 `"NO_TOKEN"`（未配置机器人 Token） |
 
@@ -239,3 +242,32 @@ KOOK 指令的失败一律以 `["kookError", { op, message }]` 回复请求方�
 - 机器人主动发消息有每日配额（10000 条/开发者），本集成不发送任何聊天消息，
   不受影响；
 - KOOK REST 有按路由的频率限制，客户端已内置 429 退避重试。
+
+### 9.4 强制流程（前端行为）
+
+前端把 KOOK 绑定作为使用房间的强制门槛（协议本身不变，服务器无需改动）：
+
+- **说书人**：建房后必须先 `kookSetToken` 保存机器人 Token 且 `kookBind`
+  绑定服务器成功（收到 `kookBound`），此前 KOOK 设置弹窗不可关闭；
+  断线重连后若有历史绑定会补推 `kookBound`，前端据此跳过强制弹窗。
+- **玩家**：进房后必须 `kookBindUser` 绑定成功（收到 `kookBoundUser`）
+  才算真正加入；说书人尚未完成 `kookBind` 时玩家在前端阻塞等待，
+  可直接退出房间。
+- **入座**：由说书人端权威校验——`claim` 到达时若房间已绑定 KOOK，
+  该玩家必须存在 `kookBindings` 绑定且其 KOOK 账号处于语音频道中
+  （设置了 `kookCategoryId` 时必须在该分组内的频道）；不满足则说书人端
+  向该玩家回 `alertPopup` + `leaveSeat` 拒绝入座。通过校验后，座位的
+  昵称/头像以绑定用户的 KOOK 昵称与头像为准覆盖。
+
+### 9.5 主频道与频道邀请
+
+- **主频道**：说书人设置分组（`kookSetCategory`）后，可通过
+  `kookSetMainChannel` 指定分组内的一个语音子频道作为主频道；
+  切换/解除分组时若主频道不再属于新分组会被自动清除。
+- **自动拉人**：已绑定玩家**第一次**进入该分组内任意语音频道时
+  （含绑定成功时已在频道内的情况），服务器自动将其移入主频道；
+  每次绑定只拉一次（`room.kookAutoMoved` 记录），解绑/退房后重置。
+- **邀请**：任何已绑定玩家可通过 `kookInvite { channelId, playerIds }`
+  邀请当前处于主频道的其他玩家到分组内指定频道；被邀请人收到
+  `kookInvite`（含邀请人、目标频道与全部被邀请人名单），
+  接受后以自己名义执行 `kookMove` 移入该频道。

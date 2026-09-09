@@ -550,6 +550,16 @@ class LiveSession {
           ) {
             this.kookSetCategory(this._store.state.kook.lastCategoryId);
           }
+          // once the category is in place, re-apply the main channel the
+          // storyteller chose last time
+          if (
+            !this._isSpectator &&
+            params.categoryId &&
+            this._store.state.kook.lastMainChannelId &&
+            !params.mainChannelId
+          ) {
+            this.kookSetMainChannel(this._store.state.kook.lastMainChannelId);
+          }
         }
         break;
       case "kookVoice":
@@ -589,6 +599,9 @@ class LiveSession {
         break;
       case "kookTokenSet":
         this._store.commit("kook/setTokenSaved", params);
+        break;
+      case "kookInvite":
+        this._store.commit("kook/addInvite", params);
         break;
       case "kookError":
         this._store.commit("kook/setError", params);
@@ -1519,12 +1532,22 @@ class LiveSession {
     if (!this._isSpectator) return;
     const players = this._store.state.players.players;
     if (players.length > seat && (seat < 0 || !players[seat].id)) {
-      // this._send("claim", [seat, this._store.state.session.playerId, this._store.state.session.playerName, this._store.state.session.playerAvatar]);
+      const kook = this._store.state.kook;
+      let name = this._store.state.session.playerName;
+      let image = this._store.state.session.playerAvatar;
+      // a bound KOOK account overrides the seated nickname and avatar
+      if (kook.selfKookId) {
+        if (kook.selfKookName) name = kook.selfKookName;
+        const kookUser = kook.users[kook.selfKookId];
+        if (kookUser && kookUser.avatar) {
+          image = String(kookUser.avatar).replace(/^http:\/\//, "https://");
+        }
+      }
       this._sendDirect("host", "claim", [
         seat,
         this._store.state.session.playerId,
-        this._store.state.session.playerName,
-        this._store.state.session.playerAvatar,
+        name,
+        image,
       ]);
     }
   }
@@ -1563,6 +1586,44 @@ class LiveSession {
     // const property = "id";
     const players = this._store.state.players.players;
     if (index >= 0 && players[index].id) return;
+    // KOOK enforcement (host side, authoritative): in a KOOK-bound room a
+    // player may only claim a seat when bound to a KOOK account that is
+    // inside a voice channel of the selected category (any voice channel
+    // when no category is set)
+    const kook = this._store.state.kook;
+    if (kook.bound && index >= 0) {
+      const kookId = kook.bindings[value];
+      let rejectReason = "";
+      if (!kookId) {
+        rejectReason = "入座前请先绑定 KOOK 账号";
+      } else {
+        const channelId = Object.keys(kook.occupancy).find((cid) =>
+          kook.occupancy[cid].includes(kookId),
+        );
+        const channel = kook.channels.find((c) => c.id === channelId);
+        if (
+          !channel ||
+          (kook.categoryId && channel.parentId !== kook.categoryId)
+        ) {
+          rejectReason = kook.categoryId
+            ? "入座前请先进入指定分组内的 KOOK 语音频道"
+            : "入座前请先进入 KOOK 语音频道";
+        }
+      }
+      if (rejectReason) {
+        this._sendDirect(value, "alertPopup", rejectReason);
+        this._sendDirect(value, "leaveSeat");
+        return;
+      }
+      // the seated nickname and avatar follow the bound KOOK account
+      const kookUser = kook.users[kookId];
+      if (kookUser) {
+        name = kookUser.nickname || kookUser.username || name;
+        if (kookUser.avatar) {
+          image = String(kookUser.avatar).replace(/^http:\/\//, "https://");
+        }
+      }
+    }
     // remove previous seat
     const oldIndex = players.findIndex(({ id }) => id === value);
     if (oldIndex >= 0 && oldIndex !== index) {
@@ -2202,6 +2263,18 @@ class LiveSession {
     this._request("kookSetCategory", this._store.state.session.playerId, {
       categoryId,
     });
+  }
+
+  /** Designate the main voice channel of the selected category (host). */
+  kookSetMainChannel(channelId) {
+    this._request("kookSetMainChannel", this._store.state.session.playerId, {
+      channelId,
+    });
+  }
+
+  /** Invite players from the main channel to another channel. */
+  kookInvite(payload) {
+    this._request("kookInvite", this._store.state.session.playerId, payload);
   }
 
   /** Set/replace the server-wide KOOK bot token (host). */
@@ -3120,6 +3193,12 @@ export default (store) => {
         break;
       case "kook/setCategory":
         session.kookSetCategory(payload);
+        break;
+      case "kook/setMainChannel":
+        session.kookSetMainChannel(payload);
+        break;
+      case "kook/invite":
+        session.kookInvite(payload);
         break;
       case "kook/setToken":
         session.kookSetToken(payload);

@@ -11,6 +11,7 @@ const state = () => ({
   guildName: "",
   guildIcon: "", // guild icon url, shown on the panel toggle once bound
   categoryId: "", // restrict the panel to voice channels under this category
+  mainChannelId: "", // designated main voice channel (auto-pull target)
   lastGuildId: "", // remembered locally to prefill the bind form
   channels: [], // [{id, name, parentId, isCategory, level, limitAmount}]
   users: {}, // kookUserId -> {id, username, nickname, avatar, online}
@@ -22,6 +23,8 @@ const state = () => ({
   selfKookName: "",
   selfQuery: "", // persisted "用户名#识别号" for automatic re-binding
   lastCategoryId: "", // last chosen channel category (host, auto re-applied)
+  lastMainChannelId: "", // last chosen main channel (host, auto re-applied)
+  invites: [], // pending channel invites: {channelId, channelName, from, invitees}
   lastError: null, // { op, message, code? }
   tokenSaved: null, // { configured, verified, ts } ack of kook/setToken
 });
@@ -64,9 +67,44 @@ const getters = {
     }
     return null;
   },
+  /**
+   * Whether this client's KOOK user is in a voice channel that satisfies the
+   * room's category restriction (any voice channel when none is set).
+   */
+  isSelfInCategoryVoice(state) {
+    if (!state.selfKookId) return false;
+    const cid = Object.keys(state.occupancy).find((id) =>
+      state.occupancy[id].includes(state.selfKookId),
+    );
+    if (!cid) return false;
+    if (!state.categoryId) return true;
+    const channel = state.channels.find((c) => c.id === cid);
+    return !!channel && channel.parentId === state.categoryId;
+  },
   /** Whether the room's binding table includes this client's playerId. */
   isSelfBound(state, getters, rootState) {
     return !!state.bindings[rootState.session.playerId];
+  },
+  /** The designated main channel object, if any. */
+  mainChannel(state) {
+    return state.channels.find((c) => c.id === state.mainChannelId) || null;
+  },
+  /** Bound players currently inside the main channel (invite candidates). */
+  mainChannelPlayers(state) {
+    if (!state.mainChannelId) return [];
+    const inMain = new Set(state.occupancy[state.mainChannelId] || []);
+    const players = [];
+    for (const [playerId, kookId] of Object.entries(state.bindings)) {
+      if (!inMain.has(kookId)) continue;
+      const u = state.users[kookId] || {};
+      players.push({
+        playerId,
+        kookId,
+        name: u.nickname || u.username || kookId,
+        avatar: u.avatar || "",
+      });
+    }
+    return players;
   },
   /** playerId -> display info of the bound KOOK user (for seat badges). */
   bindingsWithUser(state) {
@@ -103,6 +141,8 @@ const mutations = {
       state.muted = [];
       state.deafened = [];
       state.bindings = {};
+      state.mainChannelId = "";
+      state.invites = [];
       return;
     }
     state.bound = true;
@@ -110,6 +150,7 @@ const mutations = {
     state.guildName = val.guildName || "";
     state.guildIcon = val.guildIcon || "";
     state.categoryId = val.categoryId || "";
+    state.mainChannelId = val.mainChannelId || "";
   },
   setVoice(state, snap) {
     if (!snap) return;
@@ -180,6 +221,24 @@ const mutations = {
   setLastCategoryId(state, categoryId) {
     state.lastCategoryId = categoryId || "";
   },
+  setMainChannel(state) {
+    // command mutation: forwarded to the server by the socket plugin
+    state.lastError = null;
+  },
+  setLastMainChannelId(state, channelId) {
+    state.lastMainChannelId = channelId || "";
+  },
+  invite(state) {
+    // command mutation: forwarded to the server by the socket plugin
+    state.lastError = null;
+  },
+  addInvite(state, invite) {
+    if (!invite || !invite.channelId) return;
+    state.invites.push(invite);
+  },
+  removeInvite(state, index) {
+    state.invites.splice(index, 1);
+  },
   unbindSelf(state) {
     // command mutation: forwarded to the server by the socket plugin
     state.lastError = null;
@@ -195,6 +254,8 @@ const mutations = {
     state.bound = false;
     state.guildId = "";
     state.guildName = "";
+    state.mainChannelId = "";
+    state.invites = [];
     state.channels = [];
     state.users = {};
     state.occupancy = {};

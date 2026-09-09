@@ -25,6 +25,8 @@ class Room {
     this.graceTimer = null; // host-reconnect grace timer
     this.kookGuildId = null; // bound KOOK guild id (voice integration)
     this.kookCategoryId = null; // optional category restricting voice channels
+    this.kookMainChannelId = null; // designated main voice channel in the category
+    this.kookAutoMoved = new Set(); // kookUserIds already auto-pulled to the main channel
     this.kookBindings = new Map(); // playerId -> kookUserId
   }
 

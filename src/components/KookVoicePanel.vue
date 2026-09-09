@@ -24,8 +24,8 @@
         <h3>
           <font-awesome-icon icon="volume-up" class="title-icon" />
           <span class="title-text">KOOK 语音</span>
-          <span v-if="kook.guildName" class="guild-name" :title="kook.guildName"
-            >— {{ kook.guildName }}</span
+          <span v-if="panelTitle" class="guild-name" :title="panelTitle"
+            >— {{ panelTitle }}</span
           >
           <font-awesome-icon
             class="close"
@@ -47,31 +47,6 @@
 
         <!-- bound: show voice channels -->
         <template v-else>
-          <div class="self-bind">
-            <template v-if="kook.selfKookId">
-              <font-awesome-icon icon="link" />
-              <span class="bound-name">
-                已绑定:{{ kook.selfKookName || kook.selfKookId }}
-              </span>
-              <button class="remove-btn small" @click="unbindSelf">解绑</button>
-              <span v-if="!isSelfBound" class="warning-text">绑定同步中…</span>
-              <span v-else-if="!isSelfInVoice" class="warning-text">
-                请先在 KOOK 客户端进入任意语音频道,之后才能在网页端切换
-              </span>
-            </template>
-            <template v-else>
-              <input
-                v-model.trim="bindInput"
-                class="input"
-                placeholder="KOOK用户名#识别号"
-                @keyup.enter="bindSelf"
-              />
-              <button class="confirm-btn" @click="bindSelf">
-                绑定我的 KOOK 账号
-              </button>
-            </template>
-          </div>
-
           <p v-if="kook.lastError" class="error-text">
             {{ kook.lastError.message }}
           </p>
@@ -109,6 +84,14 @@
                   <font-awesome-icon icon="sign-in-alt" />
                 </button>
                 <button
+                  v-if="kook.selfKookId && isSelfBound && kook.mainChannelId"
+                  class="confirm-btn small icon-btn"
+                  title="邀请主频道玩家到此处"
+                  @click="toggleInvite(channel.id)"
+                >
+                  <font-awesome-icon icon="user-plus" />
+                </button>
+                <button
                   v-if="!session.isSpectator"
                   class="confirm-btn small icon-btn"
                   title="全员集合到此频道"
@@ -116,6 +99,45 @@
                 >
                   <font-awesome-icon icon="people-arrows" />
                 </button>
+              </div>
+              <div v-if="inviteChannelId === channel.id" class="invite-box">
+                <template v-if="invitablePlayers.length">
+                  <label
+                    v-for="p in invitablePlayers"
+                    :key="p.playerId"
+                    class="invite-item"
+                  >
+                    <input
+                      v-model="inviteSelection"
+                      type="checkbox"
+                      :value="p.playerId"
+                    />
+                    <img
+                      v-if="p.avatar"
+                      class="invite-avatar"
+                      :src="p.avatar"
+                      referrerpolicy="no-referrer"
+                      :alt="p.name"
+                    />
+                    {{ p.name }}
+                  </label>
+                  <div class="invite-actions">
+                    <button
+                      class="confirm-btn small"
+                      :class="{ disabled: !inviteSelection.length }"
+                      @click="sendInvite(channel.id)"
+                    >
+                      发送邀请
+                    </button>
+                    <button
+                      class="remove-btn small"
+                      @click="toggleInvite(null)"
+                    >
+                      取消
+                    </button>
+                  </div>
+                </template>
+                <span v-else class="empty">主频道内暂无可邀请的玩家</span>
               </div>
               <div class="user-list">
                 <span
@@ -163,12 +185,37 @@ export default {
       "isSelfInVoice",
       "selfChannelId",
       "isSelfBound",
+      "mainChannelPlayers",
     ]),
+    // the title follows the current voice channel, then the selected
+    // category, then the guild name
+    panelTitle() {
+      if (this.selfChannelId) {
+        const channel = this.kook.channels.find(
+          (c) => c.id === this.selfChannelId,
+        );
+        if (channel) return channel.name;
+      }
+      if (this.kook.categoryId) {
+        const category = this.kook.channels.find(
+          (c) => c.id === this.kook.categoryId,
+        );
+        if (category) return category.name;
+      }
+      return this.kook.guildName;
+    },
+    // main-channel players other than myself (invite candidates)
+    invitablePlayers() {
+      return this.mainChannelPlayers.filter(
+        (p) => p.playerId !== this.session.playerId,
+      );
+    },
   },
   data() {
     return {
       isOpen: false,
-      bindInput: "",
+      inviteChannelId: null, // channel currently in invite-selection mode
+      inviteSelection: [], // selected playerIds to invite
     };
   },
   watch: {
@@ -180,43 +227,33 @@ export default {
   mounted() {
     if (this.kook.bound) this.isOpen = true;
     window.addEventListener("keydown", this.onKeydown);
-    // capture phase: any pointerdown outside the panel/toggle closes it,
-    // regardless of click.stop handlers elsewhere in the page
-    document.addEventListener("pointerdown", this.onDocPointerDown, true);
   },
   beforeDestroy() {
     window.removeEventListener("keydown", this.onKeydown);
-    document.removeEventListener("pointerdown", this.onDocPointerDown, true);
   },
   methods: {
     togglePanel() {
       this.isOpen = !this.isOpen;
     },
+    // the panel never auto-hides: only the × button / toggle / Escape close it
     onKeydown(e) {
       if (e.key === "Escape") this.isOpen = false;
-    },
-    onDocPointerDown(e) {
-      if (!this.isOpen) return;
-      const { panel, toggle } = this.$refs;
-      if (panel && panel.contains(e.target)) return;
-      if (toggle && toggle.contains(e.target)) return;
-      this.isOpen = false;
-    },
-    bindSelf() {
-      if (!this.bindInput) return;
-      // remember the query so a refresh/reconnect can re-bind automatically
-      this.$store.commit("kook/setSelfQuery", this.bindInput);
-      this.$store.commit("kook/bindSelf", this.bindInput);
-      this.bindInput = "";
-    },
-    unbindSelf() {
-      // clear the local binding first so the auto re-bind does not refire
-      this.$store.commit("kook/clearSelfKook");
-      this.$store.commit("kook/unbindSelf");
     },
     moveSelf(channelId) {
       if (!this.isSelfInVoice) return;
       this.$store.commit("kook/move", channelId);
+    },
+    toggleInvite(channelId) {
+      this.inviteChannelId = channelId;
+      this.inviteSelection = [];
+    },
+    sendInvite(channelId) {
+      if (!this.inviteSelection.length) return;
+      this.$store.commit("kook/invite", {
+        channelId,
+        playerIds: [...this.inviteSelection],
+      });
+      this.toggleInvite(null);
     },
     moveAll(channelId) {
       this.$store.commit("kook/moveAll", channelId);
@@ -298,6 +335,8 @@ export default {
   max-height: 60vh;
   overflow-y: auto;
   overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
   background: rgba(15, 15, 25, 0.88);
   backdrop-filter: blur(6px);
   border: 1px solid rgba(255, 255, 255, 0.2);
@@ -306,6 +345,17 @@ export default {
   padding: 10px 12px;
   color: white;
   font-size: 90%;
+
+  &::-webkit-scrollbar {
+    width: 8px;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.25);
+    border-radius: 4px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
 
   h3 {
     margin: 0 0 8px;
@@ -345,41 +395,46 @@ export default {
     font-size: 85%;
   }
 
-  .row,
-  .self-bind {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    margin: 8px 0;
-    flex-wrap: wrap;
-  }
-
-  .bound-name {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    min-width: 0;
-    flex-shrink: 1;
-  }
-
-  .input {
-    flex-grow: 1;
-    min-width: 0;
-    padding: 4px 8px;
-    border-radius: 5px;
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    background: rgba(255, 255, 255, 0.1);
-    color: white;
-  }
-
-  .warning-text {
-    color: #f0a500;
-    font-size: 85%;
-  }
-
   .error-text {
     color: $demon;
     margin: 4px 0;
+  }
+
+  .invite-box {
+    margin: 4px 0;
+    padding: 4px 6px;
+    border: 1px dashed rgba(255, 255, 255, 0.25);
+    border-radius: 6px;
+
+    .invite-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 0;
+      cursor: pointer;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .invite-avatar {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      object-fit: cover;
+      flex-shrink: 0;
+    }
+
+    .invite-actions {
+      display: flex;
+      gap: 6px;
+      margin-top: 4px;
+    }
+
+    .empty {
+      opacity: 0.4;
+      font-size: 85%;
+    }
   }
 
   .st-controls {
